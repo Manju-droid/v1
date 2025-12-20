@@ -1,0 +1,32 @@
+{
+  "name": "v-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "cd frontend && npm run dev",
+    "dev:mobile": "npm run dev --workspace=packages/mobile",
+    "dev:backend": "cd backend && go run cmd/api/main.go",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "build:api-client": "npm run build --workspace=packages/api-client",
+    "build:web": "cd frontend && npm run build",
+    "build:all": "npm run build:shared && npm run build:api-client && npm run build:web",
+    "install:all": "npm install",
+    "test:shared": "npm run test --workspace=packages/shared",
+    "test:shared:coverage": "npm run test:coverage --workspace=packages/shared",
+    "test:shared:watch": "npm run test:watch --workspace=packages/shared",
+    "test:api-client": "npm run test --workspace=packages/api-client",
+    "test:api-client:coverage": "npm run test:coverage --workspace=packages/api-client",
+    "test:all": "npm run test:shared && npm run test:api-client",
+    "test:performance": "bash scripts/performance-test.sh",
+    "test:security": "bash scripts/security-audit.sh",
+    "test:accessibility": "bash scripts/accessibility-test.sh",
+    "test:full": "bash scripts/run-all-tests.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "typescript": "^5.0.0"
+  }
+}

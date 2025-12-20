@@ -1,0 +1,806 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
+import Link from 'next/link';
+import { LeftNav } from '@/components/feed/LeftNav';
+import { MobileNav } from '@/components/feed/MobileNav';
+import { FeedHeader } from '@/components/feed/FeedHeader';
+import { PostCard } from '@/features/posts';
+import { useStore, Post } from '@/lib/store';
+import { formatCount } from '@/lib/mock';
+import { FollowersModal, FollowingModal, AvatarUpload, CoverPhotoUpload, getUser, follow, unfollow, getUserPosts, updateUserProfile } from '@/features/users';
+import { messageAPI } from '@v/api-client';
+import { PointsDisplay } from '@/components/ui/PointsDisplay';
+import { TierBadge } from '@/components/ui/TierBadge';
+import { useUserStore } from '@/features/users';
+
+type TabType = 'posts' | 'replies' | 'media' | 'saved';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  handle: string;
+  bio: string;
+  avatarUrl: string;
+  coverPhotoUrl?: string;
+  followersOnlyComments?: boolean;
+  isFollowing: boolean;
+  isFollower: boolean;
+  counts?: {
+    posts: number;
+    followers: number;
+    following: number;
+    reachTotal: number;
+  };
+}
+
+export default function ProfilePage() {
+  const params = useParams();
+  const router = useRouter();
+  const handle = params?.handle as string;
+  const { posts: globalPosts, toggleFollow, isFollowing: isFollowingGlobal, toggleSave, currentUser } = useStore();
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('posts');
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [isSticky, setIsSticky] = useState(false);
+  const [localIsFollowing, setLocalIsFollowing] = useState(false);
+  const [localFollowersCount, setLocalFollowersCount] = useState(0);
+  const [showEditMenu, setShowEditMenu] = useState(false);
+  const [showCoverEditMenu, setShowCoverEditMenu] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const headerRef = useRef<HTMLDivElement>(null);
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
+
+  // Use currentUser from Zustand store instead of module-level currentUserMock
+  // This ensures we always have the latest user data
+  // Check both ID and handle to ensure accurate detection even after page refresh
+  const isOwnProfile = useMemo(() => {
+    if (!profile || !currentUser) return false;
+    return profile.id === currentUser.id || profile.handle === currentUser.handle;
+  }, [profile?.id, profile?.handle, currentUser?.id, currentUser?.handle]);
+  const { userPoints, fetchUserPoints } = useUserStore();
+
+  // Get post IDs from profileStore (for filtering)
+  const [profilePostIds, setProfilePostIds] = useState<Set<string>>(new Set());
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+
+  // Fetch user points when profile loads
+  useEffect(() => {
+    if (profile?.id) {
+      // Wrap in try-catch to prevent errors from breaking the page
+      fetchUserPoints(profile.id).catch((error) => {
+        console.error('Failed to fetch user points:', error);
+        // Silently fail - page should still work without points
+      });
+    }
+  }, [profile?.id, fetchUserPoints]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const loadProfilePostIds = async () => {
+      // Fetch posts from backend for this user
+      try {
+        const { posts } = await getUserPosts(handle);
+        const postIds = new Set(posts.map(p => p.id));
+        setProfilePostIds(postIds);
+
+        // Load saved posts for current user
+        if (isOwnProfile) {
+          const { postAPI } = await import('@v/api-client');
+          const savedPosts = currentUser?.id ? await postAPI.getSavedPosts(currentUser.id) : [];
+          const savedIds = new Set(savedPosts.map((p: any) => p.id));
+          setSavedPostIds(savedIds);
+        }
+      } catch (error) {
+        console.error('Failed to load profile posts:', error);
+      }
+    };
+
+    loadProfilePostIds();
+  }, [profile, handle, isOwnProfile]);
+
+  // Merge profileStore posts with global store posts to get full functionality
+  const mergedPosts = useMemo(() => {
+    if (!profile) return [];
+
+    // Find matching posts in global store
+    const merged = globalPosts
+      .filter(post => {
+        // Match by author - include ALL posts by this user (including hashtag page posts)
+        if (post.author.id !== profile.id) return false;
+
+        // Include posts that are in profileStore OR match the user
+        // (for backward compatibility with posts not yet in profileStore)
+        if (profilePostIds.size > 0 && !profilePostIds.has(post.id)) {
+          // If we have profileStore data, only show posts that are in it
+          // But also include hashtag page posts even if not in profileStore
+          const content = post.content.toLowerCase();
+          const isHashtagPagePost = content.includes('#boost') || content.includes('#shout');
+          if (!isHashtagPagePost) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .map(post => {
+        // Use the global store post which has all the functionality (comments, reactions, etc.)
+        return post;
+      });
+
+    return merged;
+  }, [globalPosts, profile, profilePostIds]);
+
+  // Load profile data
+  useEffect(() => {
+    if (!handle) {
+      setLoading(false);
+      return;
+    }
+
+    const loadProfile = async () => {
+      try {
+        setLoading(true);
+        const profileData = await getUser(handle);
+        if (!profileData) {
+          console.warn(`Profile not found for handle: ${handle}`);
+          setLoading(false);
+          return;
+        }
+
+        // Check both profileStore and global Zustand store for follow status
+        const globalFollowStatus = isFollowingGlobal(profileData.id);
+        const finalFollowStatus = globalFollowStatus || profileData.isFollowing;
+
+        setProfile({
+          id: profileData.id,
+          name: profileData.name || '',
+          handle: profileData.handle || handle,
+          bio: profileData.bio || '',
+          avatarUrl: profileData.avatarUrl || '',
+          coverPhotoUrl: profileData.coverPhotoUrl,
+          followersOnlyComments: profileData.followersOnlyComments,
+          isFollowing: finalFollowStatus,
+          isFollower: profileData.isFollower || false,
+          counts: profileData.counts || {
+            posts: 0,
+            followers: 0,
+            following: 0,
+            reachTotal: 0,
+          },
+        });
+
+        setLocalIsFollowing(finalFollowStatus);
+        setLocalFollowersCount(profileData.counts?.followers || 0);
+
+        // Posts will be loaded from mergedPosts (which uses global store)
+        // This ensures all functionality (comments, reactions, etc.) works
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+        // Set loading to false even on error
+        setLoading(false);
+        // Optionally redirect to 404 or show error message
+        // router.push('/404');
+      }
+    };
+
+    loadProfile();
+  }, [handle, activeTab, refreshKey]);
+
+  // Function to refresh saved posts
+  const refreshSavedPosts = async () => {
+    if (!isOwnProfile) return;
+    try {
+      if (!currentUser?.id) return;
+      const { postAPI } = await import('@v/api-client');
+      const savedPosts = await postAPI.getSavedPosts(currentUser.id);
+      const savedIds = new Set(savedPosts.map((p: any) => p.id));
+      setSavedPostIds(savedIds);
+    } catch (error) {
+      console.error('Failed to refresh saved posts:', error);
+    }
+  };
+
+  // Update profile counts when global posts change (for own profile)
+  useEffect(() => {
+    if (!isOwnProfile || !profile) return;
+
+    const updateCounts = async () => {
+      // Refresh profilePostIds
+      try {
+        const { posts } = await getUserPosts(handle);
+        const postIds = new Set(posts.map(p => p.id));
+        setProfilePostIds(postIds);
+
+        // Refresh saved post IDs
+        if (!currentUser?.id) return;
+        const { postAPI } = await import('@v/api-client');
+        const savedPosts = await postAPI.getSavedPosts(currentUser.id);
+        const savedIds = new Set(savedPosts.map((p: any) => p.id));
+        setSavedPostIds(savedIds);
+
+        // Update profile counts
+        const updatedProfile = await getUser(handle);
+        if (updatedProfile) {
+          // Check both profileStore and global Zustand store for follow status
+          const globalFollowStatus = isFollowingGlobal(updatedProfile.id);
+          const finalFollowStatus = globalFollowStatus || updatedProfile.isFollowing;
+
+          setProfile(prev => prev ? {
+            ...prev,
+            isFollowing: finalFollowStatus,
+            counts: updatedProfile.counts,
+          } : null);
+          setLocalIsFollowing(finalFollowStatus);
+          setLocalFollowersCount(updatedProfile.counts?.followers || 0);
+        }
+      } catch (error) {
+        console.error('Failed to update counts:', error);
+      }
+    };
+
+    // Update counts when posts change
+    updateCounts();
+
+    // Also check periodically for new posts and saved posts
+    const interval = setInterval(updateCounts, 5000); // Increased interval to reduce API load
+    return () => clearInterval(interval);
+  }, [globalPosts.length, handle, isOwnProfile, profile, isFollowingGlobal]);
+
+  // Update follow status when global store changes
+  useEffect(() => {
+    if (!profile) return;
+
+    const globalFollowStatus = isFollowingGlobal(profile.id);
+    if (globalFollowStatus !== localIsFollowing) {
+      setLocalIsFollowing(globalFollowStatus);
+      setProfile(prev => prev ? {
+        ...prev,
+        isFollowing: globalFollowStatus,
+      } : null);
+    }
+  }, [profile, isFollowingGlobal, localIsFollowing]);
+
+  // Handle sticky header on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (headerRef.current && stickyHeaderRef.current) {
+        const headerBottom = headerRef.current.offsetTop + headerRef.current.offsetHeight;
+        setIsSticky(window.scrollY > headerBottom);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Filter merged posts based on active tab
+  const filteredPosts = useMemo(() => {
+    if (activeTab === 'saved') {
+      // For saved tab, show all saved posts from global store (not just user's posts)
+      if (!isOwnProfile) return [];
+
+      // Filter posts that are both in savedPostIds AND marked as saved in global store
+      // This ensures consistency between the two stores
+      return globalPosts.filter(post => {
+        const isInSavedList = savedPostIds.has(post.id);
+        const isSavedInStore = post.saved === true;
+        return isInSavedList && isSavedInStore;
+      });
+    }
+
+    return mergedPosts.filter(post => {
+      const content = post.content.toLowerCase();
+
+      // Include ALL posts (including hashtag page posts with #boost or #shout)
+
+      switch (activeTab) {
+        case 'posts':
+          // All posts (not replies)
+          return !content.startsWith('@');
+        case 'replies':
+          // Posts that are replies (start with @)
+          return content.startsWith('@');
+        case 'media':
+          // Posts with media
+          return !!post.media;
+        default:
+          return true;
+      }
+    });
+  }, [mergedPosts, activeTab, isOwnProfile, savedPostIds, globalPosts]);
+
+  const handleFollow = async () => {
+    if (!profile) return;
+
+    const wasFollowing = localIsFollowing;
+    setLocalIsFollowing(!wasFollowing);
+    setLocalFollowersCount(prev => wasFollowing ? prev - 1 : prev + 1);
+
+    // Update global Zustand store immediately
+    toggleFollow(profile.id);
+
+    try {
+      if (wasFollowing) {
+        await unfollow(profile.handle);
+      } else {
+        await follow(profile.handle);
+      }
+
+      // Reload profile to get updated counts
+      const updatedProfile = await getUser(handle);
+      if (updatedProfile) {
+        // Check both profileStore and global Zustand store for follow status
+        const globalFollowStatus = isFollowingGlobal(updatedProfile.id);
+        const finalFollowStatus = globalFollowStatus || updatedProfile.isFollowing;
+
+        setProfile(prev => prev ? {
+          ...prev,
+          avatarUrl: updatedProfile.avatarUrl,
+          isFollowing: finalFollowStatus,
+          counts: updatedProfile.counts,
+        } : null);
+        setLocalIsFollowing(finalFollowStatus);
+        setLocalFollowersCount(updatedProfile.counts?.followers || 0);
+      }
+    } catch (error) {
+      // Revert on error
+      setLocalIsFollowing(wasFollowing);
+      setLocalFollowersCount(prev => wasFollowing ? prev + 1 : prev - 1);
+      // Revert global store
+      toggleFollow(profile.id);
+      console.error('Failed to follow/unfollow:', error);
+    }
+  };
+
+  const handleMessage = async () => {
+    if (!profile) return;
+
+    try {
+      // Check if conversation already exists
+      const conversations = currentUser?.id ? await messageAPI.listConversations({ userId: currentUser.id }) : [];
+      const existingConversation = conversations.find((c: any) =>
+        c.participants?.some((p: any) => p.id === profile.id)
+      );
+
+      if (existingConversation) {
+        // Navigate to existing conversation
+        // Use the participant's handle for the URL if available, otherwise use ID
+        const participant = existingConversation.participants?.find((p: any) => p.id === profile.id);
+        const routeParam = (participant as any)?.handle || profile.handle || profile.id;
+        router.push(`/messages/${routeParam}`);
+      } else {
+        // Create new conversation
+        // Since we don't have a direct createConversation API that returns the new conversation ID immediately
+        // without sending a message, we'll navigate to the new conversation page
+        // which handles creating the conversation when the first message is sent.
+        // We pass the handle to the URL.
+        router.push(`/messages/${profile.handle}`);
+      }
+    } catch (error) {
+      console.error('Failed to handle message action:', error);
+      // Fallback to navigating to the handle
+      router.push(`/messages/${profile.handle}`);
+    }
+  };
+
+  const handleAvatarChange = async (newAvatar: string) => {
+    if (!profile) return;
+
+    // Update avatar with cache-busting
+    const avatarWithCache = `${newAvatar}${newAvatar.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    setProfile(prev => prev ? { ...prev, avatarUrl: avatarWithCache } : null);
+
+    // Sync current user to update avatar throughout app
+    const { syncCurrentUser } = await import('@/lib/currentUser');
+    await syncCurrentUser();
+
+    // Reload profile to ensure consistency - wait a bit for store to update
+    setTimeout(async () => {
+      const updatedProfile = await getUser(handle);
+      if (updatedProfile) {
+        setProfile(prev => prev ? {
+          ...prev,
+          avatarUrl: updatedProfile.avatarUrl,
+          counts: updatedProfile.counts,
+        } : null);
+      }
+      // Force refresh by updating refreshKey
+      setRefreshKey(prev => prev + 1);
+    }, 100);
+  };
+
+  const handleCoverPhotoChange = async (newCoverPhoto?: string) => {
+    if (!profile) return;
+
+    // Update cover photo with cache-busting
+    const coverPhotoWithCache = newCoverPhoto ? `${newCoverPhoto}${newCoverPhoto.includes('?') ? '&' : '?'}v=${Date.now()}` : undefined;
+    setProfile(prev => prev ? { ...prev, coverPhotoUrl: coverPhotoWithCache } : null);
+
+    // Reload profile to ensure consistency - wait a bit for store to update
+    setTimeout(async () => {
+      const updatedProfile = await getUser(handle);
+      if (updatedProfile) {
+        setProfile(prev => prev ? {
+          ...prev,
+          coverPhotoUrl: updatedProfile.coverPhotoUrl,
+          counts: updatedProfile.counts,
+        } : null);
+      }
+      // Force refresh by updating refreshKey
+      setRefreshKey(prev => prev + 1);
+    }, 100);
+  };
+
+  const handleFollowersOnlyCommentsToggle = async () => {
+    if (!profile || !isOwnProfile) return;
+
+    const newValue = !profile.followersOnlyComments;
+    try {
+      await updateUserProfile({ followersOnlyComments: newValue });
+      setProfile(prev => prev ? { ...prev, followersOnlyComments: newValue } : null);
+    } catch (error) {
+      console.error('Failed to update followers only comments setting:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0C1117] text-[#E6EAF0]">
+        <FeedHeader />
+        <LeftNav />
+        <MobileNav />
+        <main className="lg:ml-[72px] min-h-screen pt-16">
+          <div className="max-w-[900px] mx-auto px-4 py-6">
+            <div className="animate-pulse">
+              <div className="h-32 bg-gray-800/30 rounded-2xl mb-4" />
+              <div className="h-64 bg-gray-800/30 rounded-2xl" />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-[#0C1117] text-[#E6EAF0]">
+        <FeedHeader />
+        <LeftNav />
+        <MobileNav />
+        <main className="lg:ml-[72px] min-h-screen pt-16">
+          <div className="max-w-[900px] mx-auto px-4 py-6">
+            <div className="text-center py-12">
+              <h1 className="text-2xl font-bold text-white mb-2">User not found</h1>
+              <p className="text-gray-400 mb-4">The user you're looking for doesn't exist.</p>
+              <Link href="/feed" className="text-cyan-400 hover:text-cyan-300">
+                Back to feed
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Note: isBlocked and isPrivate not implemented in profileStore yet
+  // These checks can be added later when those features are needed
+
+  return (
+    <div className="min-h-screen bg-[#0C1117] text-[#E6EAF0]">
+      <FeedHeader />
+      <LeftNav />
+      <MobileNav />
+
+      <main className="lg:ml-[72px] min-h-screen pt-16">
+        <div className="max-w-[900px] mx-auto px-4 py-6">
+          {/* Profile Header */}
+          <div ref={headerRef} className="mb-6">
+            {/* Cover Photo */}
+            <div className="relative w-full h-48 md:h-64 mb-6 rounded-2xl overflow-hidden bg-gradient-to-r from-cyan-500/20 to-purple-500/20">
+              {profile.coverPhotoUrl ? (
+                <Image
+                  src={profile.coverPhotoUrl}
+                  alt={`${profile.name}'s cover`}
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-r from-cyan-500/10 to-purple-500/10" />
+              )}
+              {isOwnProfile && (
+                <div className="absolute top-4 right-4">
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowCoverEditMenu(!showCoverEditMenu)}
+                      className="px-3 py-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-sm text-white rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      Edit Cover
+                    </button>
+                    {showCoverEditMenu && (
+                      <div className="absolute top-full right-0 mt-2 bg-gray-800 border border-white/[0.06] rounded-lg shadow-lg z-10 min-w-[200px]">
+                        <div className="p-2">
+                          <CoverPhotoUpload
+                            currentCoverPhoto={profile.coverPhotoUrl}
+                            onCoverPhotoChange={handleCoverPhotoChange}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-row items-start justify-between gap-6 mb-6">
+              {/* User Info - Left Side */}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">
+                  {profile.name}
+                </h1>
+                <p className="text-gray-400 text-sm md:text-base mb-2">
+                  @{profile.handle}
+                </p>
+                {profile.bio && (
+                  <p className="text-gray-400 text-sm md:text-base mb-4">
+                    {profile.bio}
+                  </p>
+                )}
+
+                {/* Tier and Points Display - Show for all profiles */}
+                <div className="mb-4">
+                  {userPoints ? (
+                    <PointsDisplay
+                      points={userPoints.points}
+                      tier={userPoints.tier}
+                      subscriptionActive={userPoints.subscriptionActive}
+                      loginStreak={userPoints.loginStreak}
+                      size="sm"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                      <span>Points: 0</span>
+                      <TierBadge tier="SILVER" size="sm" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Edit Profile Button */}
+                {isOwnProfile ? (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowEditMenu(!showEditMenu)}
+                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                    >
+                      Edit Profile
+                    </button>
+                    {showEditMenu && (
+                      <div className="absolute top-full left-0 mt-2 bg-gray-800 border border-white/[0.06] rounded-lg shadow-lg z-10 min-w-[250px]">
+                        <div className="p-2">
+                          <AvatarUpload
+                            currentAvatar={profile.avatarUrl}
+                            onAvatarChange={handleAvatarChange}
+                          />
+                        </div>
+                        <div className="border-t border-white/[0.06] p-3">
+                          <label className="flex items-center justify-between cursor-pointer">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-white mb-1">Followers Only Comments</p>
+                              <p className="text-xs text-gray-400">Only your followers can comment on your posts</p>
+                            </div>
+                            <button
+                              onClick={handleFollowersOnlyCommentsToggle}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${profile.followersOnlyComments ? 'bg-cyan-500' : 'bg-gray-600'
+                                }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profile.followersOnlyComments ? 'translate-x-6' : 'translate-x-1'
+                                  }`}
+                              />
+                            </button>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleMessage}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors bg-gray-700 hover:bg-gray-600 text-white"
+                    >
+                      Message
+                    </button>
+                    <button
+                      onClick={handleFollow}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${localIsFollowing
+                        ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                        : 'bg-cyan-500 hover:bg-cyan-600 text-white'
+                        }`}
+                    >
+                      {localIsFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Profile Picture - Right Side */}
+              <div className="relative w-20 h-20 md:w-28 md:h-28 rounded-full overflow-hidden flex-shrink-0 ring-4 ring-[#0C1117] -mt-12 md:-mt-16">
+                {profile.avatarUrl && (
+                  <Image
+                    src={profile.avatarUrl}
+                    alt={profile.name}
+                    fill
+                    className="object-cover"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Stats Row */}
+            <div className="flex items-center gap-6 text-gray-400">
+              <button
+                onClick={() => setShowFollowersModal(true)}
+                className="hover:underline cursor-pointer"
+              >
+                <span className="text-lg font-bold text-gray-300">{formatCount(profile.counts?.posts || 0)}</span>
+                <span className="text-sm ml-1">Posts</span>
+              </button>
+              <button
+                onClick={() => setShowFollowersModal(true)}
+                className="hover:underline cursor-pointer"
+              >
+                <span className="text-lg font-bold text-gray-300">{formatCount(localFollowersCount || profile.counts?.followers || 0)}</span>
+                <span className="text-sm ml-1">Followers</span>
+              </button>
+              <button
+                onClick={() => setShowFollowingModal(true)}
+                className="hover:underline cursor-pointer"
+              >
+                <span className="text-lg font-bold text-gray-300">{formatCount(profile.counts?.following || 0)}</span>
+                <span className="text-sm ml-1">Following</span>
+              </button>
+              <div>
+                <span className="text-lg font-bold text-gray-300">{formatCount(profile.counts?.reachTotal || 0)}</span>
+                <span className="text-sm ml-1">Total Reach</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Header */}
+          <AnimatePresence>
+            {isSticky && (
+              <motion.div
+                ref={stickyHeaderRef}
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="fixed top-16 left-0 right-0 lg:left-[72px] bg-[#0C1117]/95 backdrop-blur-sm border-b border-white/[0.06] z-40 py-3 px-4"
+              >
+                <div className="max-w-[900px] mx-auto flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-cyan-500/20">
+                      <Image
+                        src={profile.avatarUrl}
+                        alt={profile.name}
+                        width={40}
+                        height={40}
+                        className="object-cover"
+                      />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-white">{profile.name}</h2>
+                      <p className="text-xs text-gray-400">@{profile.handle}</p>
+                    </div>
+                  </div>
+                  {isOwnProfile ? (
+                    <button className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-semibold transition-colors">
+                      Edit Profile
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleMessage}
+                        className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-gray-800 hover:bg-gray-700 text-white"
+                      >
+                        Message
+                      </button>
+                      <button
+                        onClick={handleFollow}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${localIsFollowing
+                          ? 'bg-gray-800 hover:bg-gray-700 text-white'
+                          : 'bg-cyan-500 hover:bg-cyan-600 text-white'
+                          }`}
+                      >
+                        {localIsFollowing ? 'Following' : 'Follow'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-6 border-b border-white/[0.06] mb-6 overflow-x-auto">
+            {([
+              'posts',
+              'replies',
+              'media',
+              ...(isOwnProfile ? ['saved'] as TabType[] : [])
+            ] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`pb-3 px-1 text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === tab
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+                  }`}
+              >
+                {tab === 'posts' ? 'Recent Posts' :
+                  tab === 'replies' ? 'Replies' :
+                    tab === 'media' ? 'Media' :
+                      tab === 'saved' ? 'Saved' : tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Post List */}
+          {filteredPosts.length > 0 ? (
+            <div className="space-y-4">
+              {filteredPosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  source="profile"
+                  onSaveChange={refreshSavedPosts}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="text-gray-500 mb-2">
+                {activeTab === 'posts' && 'No posts yet'}
+                {activeTab === 'replies' && 'No replies yet'}
+                {activeTab === 'media' && 'No media yet'}
+                {activeTab === 'saved' && 'No saved posts yet'}
+              </div>
+              <p className="text-sm text-gray-400">
+                {activeTab === 'saved'
+                  ? 'Posts you save will appear here.'
+                  : isOwnProfile
+                    ? 'Start sharing your thoughts!'
+                    : 'This user hasn\'t posted anything yet.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modals */}
+      {showFollowersModal && profile && (
+        <FollowersModal
+          userId={profile.handle}
+          onClose={() => setShowFollowersModal(false)}
+        />
+      )}
+      {showFollowingModal && profile && (
+        <FollowingModal
+          userId={profile.handle}
+          onClose={() => setShowFollowingModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
