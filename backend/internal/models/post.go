@@ -5,33 +5,37 @@ import "time"
 type PostStatus string
 
 const (
-	PostStatusVisible      PostStatus = "VISIBLE"
-	PostStatusAbusiveFlag  PostStatus = "ABUSIVE_FLAG"
-	PostStatusTempHidden   PostStatus = "TEMP_HIDDEN"
-	PostStatusRemoved      PostStatus = "REMOVED"
+	PostStatusVisible     PostStatus = "VISIBLE"
+	PostStatusAbusiveFlag PostStatus = "ABUSIVE_FLAG"
+	PostStatusTempHidden  PostStatus = "TEMP_HIDDEN"
+	PostStatusRemoved     PostStatus = "REMOVED"
 )
 
 type Post struct {
-	ID                string     `json:"id"`
-	AuthorID          string     `json:"authorId"`
-	Content           string     `json:"content"`
-	MediaType         string     `json:"mediaType,omitempty"` // "image" or "video"
-	MediaURL          string     `json:"mediaUrl,omitempty"`
-	CommentsDisabled  bool       `json:"commentsDisabled"`
-	CommentLimit      *int       `json:"commentLimit,omitempty"`
-	ReactionCount     int        `json:"reactionCount"`
-	CommentCount      int        `json:"commentCount"`
-	SaveCount         int        `json:"saveCount"`
-	Reach24h          int        `json:"reach_24h"`
-	ReachAll          int        `json:"reach_all"`
-	
+	ID               string `json:"id"`
+	AuthorID         string `json:"authorId"`
+	Content          string `json:"content"`
+	MediaType        string `json:"mediaType,omitempty"` // "image" or "video"
+	MediaURL         string `json:"mediaUrl,omitempty"`
+	CommentsDisabled bool   `json:"commentsDisabled"`
+	CommentLimit     *int   `json:"commentLimit,omitempty"`
+	ReactionCount    int    `json:"reactionCount"`
+	CommentCount     int    `json:"commentCount"`
+	SaveCount        int    `json:"saveCount"`
+	Reach24h         int    `json:"reach_24h"`
+	ReachAll         int    `json:"reach_all"`
+
 	// Moderation fields
 	Status            PostStatus `json:"status"`            // VISIBLE, ABUSIVE_FLAG, TEMP_HIDDEN, REMOVED
-	ReportCount       int        `json:"reportCount"`        // Number of reports
+	ReportCount       int        `json:"reportCount"`       // Number of reports
 	InModerationQueue bool       `json:"inModerationQueue"` // In admin review queue
-	
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
+
+	// Translation fields
+	OriginalLanguage string            `json:"originalLanguage,omitempty"` // Detected/specified language code (e.g., "en", "te")
+	Translations     map[string]string `json:"translations,omitempty"`     // Cached translations {"te": "...", "hi": "..."}
+
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Comment struct {
@@ -56,4 +60,3 @@ type SavedPost struct {
 	PostID    string    `json:"postId"`
 	CreatedAt time.Time `json:"createdAt"`
 }
-

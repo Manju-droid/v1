@@ -14,22 +14,24 @@ import (
 )
 
 type PostHandlers struct {
-	repo          repository.PostRepository
-	userRepo      repository.UserRepository
-	notifRepo     repository.NotificationRepository
-	analyticsRepo repository.AnalyticsRepository
-	pointsService *service.PointsService
-	modService    *service.ModerationService
+	repo               repository.PostRepository
+	userRepo           repository.UserRepository
+	notifRepo          repository.NotificationRepository
+	analyticsRepo      repository.AnalyticsRepository
+	pointsService      *service.PointsService
+	modService         *service.ModerationService
+	translationService *service.TranslationService
 }
 
-func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService) *PostHandlers {
+func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService, translationService *service.TranslationService) *PostHandlers {
 	return &PostHandlers{
-		repo:          repo,
-		userRepo:      userRepo,
-		notifRepo:     notifRepo,
-		analyticsRepo: analyticsRepo,
-		pointsService: pointsService,
-		modService:    modService,
+		repo:               repo,
+		userRepo:           userRepo,
+		notifRepo:          notifRepo,
+		analyticsRepo:      analyticsRepo,
+		pointsService:      pointsService,
+		modService:         modService,
+		translationService: translationService,
 	}
 }
 
@@ -527,5 +529,69 @@ func (h *PostHandlers) GetSavedPosts(w http.ResponseWriter, r *http.Request) {
 		"posts":  posts,
 		"limit":  limit,
 		"offset": offset,
+	})
+}
+
+// TranslatePost translates a post to the target language
+func (h *PostHandlers) TranslatePost(w http.ResponseWriter, r *http.Request) {
+	postID := chi.URLParam(r, "id")
+	targetLang := r.URL.Query().Get("lang")
+
+	if targetLang == "" {
+		Error(w, http.StatusBadRequest, "lang query parameter is required")
+		return
+	}
+
+	// Get the post
+	post, err := h.repo.GetByID(postID)
+	if err != nil {
+		Error(w, http.StatusNotFound, "Post not found")
+		return
+	}
+
+	// Check if translation already cached
+	if post.Translations == nil {
+		post.Translations = make(map[string]string)
+	}
+
+	var translatedContent string
+	if cached, ok := post.Translations[targetLang]; ok {
+		translatedContent = cached
+	} else {
+		// Determine source language
+		sourceLang := post.OriginalLanguage
+		if sourceLang == "" {
+			// Detect the language from content
+			detected, err := h.translationService.DetectLanguage(post.Content)
+			if err == nil {
+				sourceLang = detected
+				post.OriginalLanguage = detected
+			} else {
+				sourceLang = "en" // Default to English
+			}
+		}
+
+		// Translate the content
+		translated, err := h.translationService.Translate(post.Content, sourceLang, targetLang)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "Translation failed: "+err.Error())
+			return
+		}
+
+		translatedContent = translated
+
+		// Cache the translation
+		post.Translations[targetLang] = translated
+		if err := h.repo.Update(post); err != nil {
+			// Log error but don't fail the request
+			// Translation still works, just won't be cached
+		}
+	}
+
+	JSON(w, http.StatusOK, map[string]interface{}{
+		"originalContent":   post.Content,
+		"translatedContent": translatedContent,
+		"originalLanguage":  post.OriginalLanguage,
+		"targetLanguage":    targetLang,
 	})
 }

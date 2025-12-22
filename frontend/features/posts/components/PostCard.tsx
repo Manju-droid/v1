@@ -31,6 +31,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
   const menuRef = useRef<HTMLDivElement>(null);
   const justIncrementedRef = useRef(false);
 
+  // Translation state
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+
   // Sync reachCount with post prop when it changes
   // For self-views, always use backend count (which excludes self-views)
   // For other posts, only update if higher to avoid decreasing
@@ -269,6 +274,44 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
     }
   };
 
+  const handleTranslate = async () => {
+    if (showTranslation) {
+      // Toggle back to original
+      setShowTranslation(false);
+      return;
+    }
+
+    // If already translated, just show it
+    if (translatedContent) {
+      setShowTranslation(true);
+      return;
+    }
+
+    // Get user's secondary language (default to Telugu if not set)
+    const targetLang = currentUserMock?.languages?.[1] || 'te';
+
+    // Use the backend API URL
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+
+    setIsTranslating(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/translate?lang=${targetLang}`);
+      if (!response.ok) throw new Error('Translation failed');
+
+      const result = await response.json();
+      // Backend returns { success: true, data: { translatedContent: "..." } }
+      const translated = result.data?.translatedContent || result.translatedContent || '';
+      setTranslatedContent(translated);
+      setShowTranslation(true);
+      addToast('Translated successfully', 'success');
+    } catch (err) {
+      addToast('Translation failed', 'error');
+      console.error('Translation error:', err);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   return (
     <motion.article
       ref={cardRef}
@@ -406,8 +449,16 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
       {/* Content */}
       <div className="mb-3">
         <p className="text-gray-100 text-sm md:text-base leading-relaxed line-clamp-4">
-          {renderTextWithHashtags(post.content)}
+          {showTranslation ? translatedContent : renderTextWithHashtags(post.content)}
         </p>
+        {showTranslation && translatedContent && (
+          <p className="text-purple-400/60 text-xs mt-2 flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+            </svg>
+            Translated from original
+          </p>
+        )}
       </div>
 
       {/* Media */}
@@ -517,16 +568,43 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
           </motion.button>
         </div>
 
-        {/* Share */}
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={handleShare}
-          className="group flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
-          aria-label="Share post"
-        >
-          <SplineShareIcon className="w-5 h-5" />
-          <span className="text-xs md:text-sm font-semibold hidden md:inline">Share</span>
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {/* Translate */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={handleTranslate}
+            disabled={isTranslating}
+            className={`group flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg transition-colors ${showTranslation
+              ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+              : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
+              } ${isTranslating ? 'opacity-50 cursor-not-allowed' : ''}`}
+            aria-label={showTranslation ? 'Show original' : 'Translate post'}
+          >
+            {isTranslating ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+              </svg>
+            )}
+            <span className="text-xs md:text-sm font-semibold hidden md:inline">
+              {showTranslation ? 'Original' : 'Translate'}
+            </span>
+          </motion.button>
+
+          {/* Share */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={handleShare}
+            className="group flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 transition-colors"
+            aria-label="Share post"
+          >
+            <SplineShareIcon className="w-5 h-5" />
+            <span className="text-xs md:text-sm font-semibold hidden md:inline">Share</span>
+          </motion.button>
+        </div>
       </div>
     </motion.article>
   );

@@ -220,6 +220,7 @@ func NewServer(cfg *config.Config) *Server {
 	// Initialize services
 	pointsService := service.NewPointsService(userRepo)
 	moderationService := service.NewModerationService(postRepo, userRepo, pointsService)
+	translationService := service.NewTranslationService(cfg.LibreTranslateURL, cfg.LibreTranslateAPIKey)
 
 	// Initialize WebSocket Hub
 	hub := service.NewHub()
@@ -228,7 +229,7 @@ func NewServer(cfg *config.Config) *Server {
 	// Initialize handlers
 	authHandlers := api.NewAuthHandlers(authRepo, userRepo, pointsService, notifRepo)
 	userHandlers := api.NewUserHandlers(userRepo)
-	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService)
+	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService)
 	messageHandlers := api.NewMessageHandlers(messageRepo)
 	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, hub)
 	debateHandlers := api.NewDebateHandlers(debateRepo, userRepo, pointsService, hub)
@@ -336,6 +337,9 @@ func NewServer(cfg *config.Config) *Server {
 			r.Post("/{id}/save", postHandlers.Save)
 			r.Delete("/{id}/save", postHandlers.Unsave)
 			r.Get("/saved", postHandlers.GetSavedPosts)
+
+			// Translation route
+			r.Get("/{id}/translate", postHandlers.TranslatePost)
 
 			// Reporting route
 			r.Post("/{id}/report", moderationHandlers.ReportPost)

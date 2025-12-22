@@ -6,21 +6,25 @@ import (
 )
 
 type Config struct {
-	Port        string
-	JWTSecret   string
-	Environment string
-	CORSOrigins []string
-	DatabaseURL string
+	Port                 string
+	JWTSecret            string
+	Environment          string
+	CORSOrigins          []string
+	DatabaseURL          string
+	LibreTranslateURL    string // URL to LibreTranslate instance
+	LibreTranslateAPIKey string // Optional API key for public instance
 }
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
 	config := &Config{
-		Port:        getEnv("PORT", "8080"),
-		JWTSecret:   getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
-		Environment: getEnv("ENVIRONMENT", "development"),
-		DatabaseURL: getEnv("DATABASE_URL", ""),
-		CORSOrigins: getCORSOrigins(),
+		Port:                 getEnv("PORT", "8080"),
+		JWTSecret:            getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		Environment:          getEnv("ENVIRONMENT", "development"),
+		DatabaseURL:          getEnv("DATABASE_URL", ""),
+		LibreTranslateURL:    getEnv("LIBRETRANSLATE_URL", "https://libretranslate.com"),
+		LibreTranslateAPIKey: getEnv("LIBRETRANSLATE_API_KEY", ""),
+		CORSOrigins:          getCORSOrigins(),
 	}
 
 	return config
@@ -42,4 +46,3 @@ func getCORSOrigins() []string {
 	}
 	return strings.Split(origins, ",")
 }
-

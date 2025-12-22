@@ -10,6 +10,7 @@ export interface MockUser {
   email?: string;
   followerCount?: number;
   followingCount?: number;
+  languages?: string[]; // Array of language codes, first is primary, second is secondary
 }
 
 export interface MockPost {
