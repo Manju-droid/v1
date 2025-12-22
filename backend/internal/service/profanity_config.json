@@ -1,0 +1,124 @@
+{
+    "words": [
+        {
+            "id": "telugu_erripuka",
+            "canonical": "erripuka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_kodaka",
+            "canonical": "kodaka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_koduku",
+            "canonical": "koduku",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_dengu",
+            "canonical": "dengu",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_dengey",
+            "canonical": "dengey",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_puka",
+            "canonical": "puka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_pooka",
+            "canonical": "pooka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_gudda",
+            "canonical": "gudda",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_boothi",
+            "canonical": "boothi",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_boothulu",
+            "canonical": "boothulu",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_lanja",
+            "canonical": "lanja",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_lanjakodaka",
+            "canonical": "lanjakodaka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_lanjakoduku",
+            "canonical": "lanjakoduku",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_thoka",
+            "canonical": "thoka",
+            "severity": "medium"
+        },
+        {
+            "id": "telugu_munda",
+            "canonical": "munda",
+            "severity": "medium"
+        },
+        {
+            "id": "telugu_modda",
+            "canonical": "modda",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_gujju",
+            "canonical": "gujju",
+            "severity": "medium"
+        },
+        {
+            "id": "telugu_boothumunda",
+            "canonical": "boothumunda",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_dengali",
+            "canonical": "dengali",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_dengana",
+            "canonical": "dengana",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_dengichuko",
+            "canonical": "dengichuko",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_boothibidda",
+            "canonical": "boothibidda",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_nakodaka",
+            "canonical": "nakodaka",
+            "severity": "high"
+        },
+        {
+            "id": "telugu_nakoduku",
+            "canonical": "nakoduku",
+            "severity": "high"
+        }
+    ]
+}

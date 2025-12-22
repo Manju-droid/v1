@@ -1,159 +1,230 @@
 package service
 
 import (
+	"encoding/json"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
 )
 
-// Bad words list - English + Indian languages typed in English
-var badWords = []string{
-	// English profanity
-	"fuck", "shit", "damn", "bitch", "asshole", "bastard", "cunt", "piss",
-	"dick", "cock", "pussy", "whore", "slut", "faggot", "nigger", "retard",
-	
-	// Hindi/Urdu typed in English
-	"madarchod", "behenchod", "bhenchod", "chutiya", "chut", "lund", "gaand",
-	"randi", "harami", "kutta", "kutti", "saala", "saali", "bhosdike", "bhosdi",
-	"choot", "chootiya", "maderchod", "behenchod", "lund", "gaandu",
-	
-	// Tamil typed in English
-	"punda", "pundai", "punda", "mairu", "thayoli", "thayoli", "kuthi",
-	"kuthi", "pombala", "pombala", "sombu", "sombu",
-	
-	// Telugu typed in English
-	"lanja", "lanja", "pukka", "pukka", "gudda", "gudda", "pooka",
-	
-	// Malayalam typed in English
-	"mone", "punda", "punda", "kuthi", "kuthi", "pombala",
-	
-	// Kannada typed in English
-	"henge", "henge", "punda", "punda", "kuthi",
+// ProfanityWord represents a single profane word configuration
+type ProfanityWord struct {
+	ID        string `json:"id"`
+	Canonical string `json:"canonical"`
+	Severity  string `json:"severity"`
 }
 
-// Spaced variations patterns (regex)
-var spacedPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\b(madar|mader|madar|mother)\s+(chod|chud|choot)\b`),
-	regexp.MustCompile(`(?i)\b(behen|bhen|sister)\s+(chod|chud|choot)\b`),
-	regexp.MustCompile(`(?i)\b(fuck|fuk|fuc)\s+(you|u|off)\b`),
-	regexp.MustCompile(`(?i)\b(go|get)\s+(to|2)\s+(hell|heck)\b`),
+// ProfanityConfig holds the full configuration
+type ProfanityConfig struct {
+	Words []ProfanityWord `json:"words"`
 }
 
-// Levenshtein distance for fuzzy matching
-func levenshteinDistance(s1, s2 string) int {
-	r1, r2 := []rune(s1), []rune(s2)
-	column := make([]int, len(r1)+1)
-
-	for y := 1; y <= len(r1); y++ {
-		column[y] = y
-	}
-
-	for x := 1; x <= len(r2); x++ {
-		column[0] = x
-		lastDiag := x - 1
-		for y := 1; y <= len(r1); y++ {
-			oldDiag := column[y]
-			cost := 0
-			if r1[y-1] != r2[x-1] {
-				cost = 1
-			}
-			column[y] = min(column[y]+1, column[y-1]+1, lastDiag+cost)
-			lastDiag = oldDiag
-		}
-	}
-	return column[len(r1)]
+// ProfanityMatch represents a detected match
+type ProfanityMatch struct {
+	RuleID string
+	Start  int
+	End    int
 }
 
-func min(a, b, c int) int {
-	if a < b && a < c {
-		return a
-	}
-	if b < c {
-		return b
-	}
-	return c
+// ProfanityResult is the result of profanity detection
+type ProfanityResult struct {
+	IsProfane bool
+	Severity  string
+	Matches   []ProfanityMatch
 }
 
-// Calculate similarity percentage (0-100)
-func similarity(s1, s2 string) float64 {
-	if len(s1) == 0 && len(s2) == 0 {
-		return 100.0
+// Global configuration and patterns
+var (
+	profanityConfig   *ProfanityConfig
+	profanityPatterns map[string]*regexp.Regexp
+)
+
+// Initialize profanity engine
+func init() {
+	// Load configuration
+	config, err := loadProfanityConfig("internal/service/profanity_config.json")
+	if err != nil {
+		// Fallback to hardcoded config if file not found
+		config = getDefaultConfig()
 	}
-	if len(s1) == 0 || len(s2) == 0 {
-		return 0.0
+	profanityConfig = config
+
+	// Build patterns
+	profanityPatterns = make(map[string]*regexp.Regexp)
+	for _, word := range config.Words {
+		profanityPatterns[word.ID] = buildPattern(word.Canonical)
 	}
-	
-	maxLen := len(s1)
-	if len(s2) > maxLen {
-		maxLen = len(s2)
-	}
-	
-	if maxLen == 0 {
-		return 100.0
-	}
-	
-	distance := levenshteinDistance(s1, s2)
-	similarity := 100.0 * (1.0 - float64(distance)/float64(maxLen))
-	return similarity
 }
 
-// Normalize text for matching (remove special chars, spaces)
-func normalizeText(text string) string {
-	var result strings.Builder
+// getDefaultConfig returns a hardcoded default configuration
+func getDefaultConfig() *ProfanityConfig {
+	return &ProfanityConfig{
+		Words: []ProfanityWord{
+			{ID: "telugu_erripuka", Canonical: "erripuka", Severity: "high"},
+			{ID: "telugu_kodaka", Canonical: "kodaka", Severity: "high"},
+			{ID: "telugu_koduku", Canonical: "koduku", Severity: "high"},
+			{ID: "telugu_dengu", Canonical: "dengu", Severity: "high"},
+			{ID: "telugu_dengey", Canonical: "dengey", Severity: "high"},
+			{ID: "telugu_puka", Canonical: "puka", Severity: "high"},
+			{ID: "telugu_pooka", Canonical: "pooka", Severity: "high"},
+			{ID: "telugu_gudda", Canonical: "gudda", Severity: "high"},
+			{ID: "telugu_boothi", Canonical: "boothi", Severity: "high"},
+			{ID: "telugu_boothulu", Canonical: "boothulu", Severity: "high"},
+			{ID: "telugu_lanja", Canonical: "lanja", Severity: "high"},
+			{ID: "telugu_lanjakodaka", Canonical: "lanjakodaka", Severity: "high"},
+			{ID: "telugu_lanjakoduku", Canonical: "lanjakoduku", Severity: "high"},
+			{ID: "telugu_thoka", Canonical: "thoka", Severity: "medium"},
+			{ID: "telugu_munda", Canonical: "munda", Severity: "medium"},
+			{ID: "telugu_modda", Canonical: "modda", Severity: "high"},
+			{ID: "telugu_gujju", Canonical: "gujju", Severity: "medium"},
+			{ID: "telugu_boothumunda", Canonical: "boothumunda", Severity: "high"},
+			{ID: "telugu_dengali", Canonical: "dengali", Severity: "high"},
+			{ID: "telugu_dengana", Canonical: "dengana", Severity: "high"},
+			{ID: "telugu_dengichuko", Canonical: "dengichuko", Severity: "high"},
+			{ID: "telugu_boothibidda", Canonical: "boothibidda", Severity: "high"},
+			{ID: "telugu_nakodaka", Canonical: "nakodaka", Severity: "high"},
+			{ID: "telugu_nakoduku", Canonical: "nakoduku", Severity: "high"},
+		},
+	}
+}
+
+// loadProfanityConfig loads the profanity configuration from JSON file
+func loadProfanityConfig(path string) (*ProfanityConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var config ProfanityConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+// normalizeForProfanity normalizes text for profanity detection
+func normalizeForProfanity(input string) string {
+	// Step 1: Convert to lowercase
+	text := strings.ToLower(input)
+
+	// Step 2: Remove all non-alphanumeric characters FIRST (before leetspeak conversion)
+	var builder strings.Builder
 	for _, r := range text {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			result.WriteRune(unicode.ToLower(r))
+			builder.WriteRune(r)
 		}
 	}
-	return result.String()
+	text = builder.String()
+
+	// Step 3: Replace leetspeak (now only on remaining alphanumerics)
+	leetspeak := map[rune]rune{
+		'0': 'o',
+		'1': 'i',
+		'3': 'e',
+		'4': 'a',
+		'5': 's',
+		'7': 't',
+		'8': 'b',
+	}
+
+	builder.Reset()
+	for _, r := range text {
+		if replacement, ok := leetspeak[r]; ok {
+			builder.WriteRune(replacement)
+		} else {
+			builder.WriteRune(r)
+		}
+	}
+	text = builder.String()
+
+	// Step 4: Collapse repeated letters (max 2 consecutive)
+	builder.Reset()
+	var prevRune rune
+	var count int
+
+	for _, r := range text {
+		if r == prevRune {
+			count++
+			if count <= 2 {
+				builder.WriteRune(r)
+			}
+		} else {
+			builder.WriteRune(r)
+			prevRune = r
+			count = 1
+		}
+	}
+
+	return builder.String()
 }
 
-// Check if text contains abusive content
+// buildPattern creates a flexible regex pattern from a canonical word
+func buildPattern(canonical string) *regexp.Regexp {
+	// Build pattern that allows repeated letters
+	var pattern strings.Builder
+
+	for _, r := range canonical {
+		// Each letter must appear at least once, can optionally repeat
+		pattern.WriteRune(r)
+		pattern.WriteRune('+') // one or more
+	}
+
+	// Compile and return regex (case-insensitive, no word boundaries)
+	return regexp.MustCompile("(?i)" + pattern.String())
+}
+
+// DetectProfanity detects profanity in the given text
+func DetectProfanity(text string) ProfanityResult {
+	result := ProfanityResult{
+		IsProfane: false,
+		Severity:  "",
+		Matches:   []ProfanityMatch{},
+	}
+
+	// Normalize the input
+	normalized := normalizeForProfanity(text)
+
+	// Check against all patterns
+	maxSeverity := ""
+	for id, pattern := range profanityPatterns {
+		matches := pattern.FindAllStringIndex(normalized, -1)
+		if len(matches) > 0 {
+			result.IsProfane = true
+
+			// Find the word config to get severity
+			for _, word := range profanityConfig.Words {
+				if word.ID == id {
+					// Track highest severity (high > medium > low)
+					if maxSeverity == "" {
+						maxSeverity = word.Severity
+					} else if word.Severity == "high" {
+						maxSeverity = "high"
+					} else if word.Severity == "medium" && maxSeverity != "high" {
+						maxSeverity = "medium"
+					}
+
+					// Add all matches
+					for _, match := range matches {
+						result.Matches = append(result.Matches, ProfanityMatch{
+							RuleID: id,
+							Start:  match[0],
+							End:    match[1],
+						})
+					}
+					break
+				}
+			}
+		}
+	}
+
+	result.Severity = maxSeverity
+	return result
+}
+
+// IsAbusive checks if text contains abusive content (backward compatibility)
 func IsAbusive(text string) bool {
-	// Convert to lowercase
-	lowerText := strings.ToLower(text)
-	
-	// Check regex patterns for spaced variations
-	for _, pattern := range spacedPatterns {
-		if pattern.MatchString(lowerText) {
-			return true
-		}
-	}
-	
-	// Split text into words
-	words := strings.Fields(lowerText)
-	
-	// Check each word against bad words list
-	for _, word := range words {
-		// Remove punctuation
-		word = strings.Trim(word, ".,!?;:()[]{}\"'")
-		
-		// Direct match
-		for _, badWord := range badWords {
-			if word == badWord {
-				return true
-			}
-		}
-		
-		// Fuzzy matching (80% similarity threshold)
-		normalizedWord := normalizeText(word)
-		for _, badWord := range badWords {
-			normalizedBadWord := normalizeText(badWord)
-			if similarity(normalizedWord, normalizedBadWord) >= 80.0 {
-				return true
-			}
-		}
-	}
-	
-	// Check for word combinations (e.g., "madar chod" without space)
-	normalizedText := normalizeText(text)
-	for _, badWord := range badWords {
-		normalizedBadWord := normalizeText(badWord)
-		if strings.Contains(normalizedText, normalizedBadWord) {
-			return true
-		}
-	}
-	
-	return false
+	result := DetectProfanity(text)
+	return result.IsProfane
 }
-
