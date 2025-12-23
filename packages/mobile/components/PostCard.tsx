@@ -21,6 +21,11 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
   const [isReacted, setIsReacted] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
+  // Translation state
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+
   // Extract author info (post might have author object or just authorId)
   const author = (post as any).author || { id: post.authorId, name: 'Unknown', handle: 'unknown' };
   const isOwnPost = currentUser && author.id === currentUser.id;
@@ -47,11 +52,51 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
     // Use React Native Share API
   };
 
+  const handleTranslate = async () => {
+    if (showTranslation) {
+      // Toggle back to original
+      setShowTranslation(false);
+      return;
+    }
+
+    // If already translated, just show it
+    if (translatedContent) {
+      setShowTranslation(true);
+      return;
+    }
+
+    // Get user's secondary language (default to Telugu)
+    const targetLang = currentUser?.languages?.[1] || 'te';
+    const API_BASE_URL = 'http://localhost:8080/api';
+
+    setIsTranslating(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/posts/${post.id}/translate?lang=${targetLang}`);
+      if (!response.ok) throw new Error('Translation failed');
+
+      const result = await response.json();
+      // Backend returns { success: true, data: { translatedContent: "..." } }
+      const translated = result.data?.translatedContent || result.translatedContent || '';
+
+      if (!translated) {
+        throw new Error('No translation in response');
+      }
+
+      setTranslatedContent(translated);
+      setShowTranslation(true);
+    } catch (err) {
+      console.error('Translation error:', err);
+      // Could add toast notification here
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   // Render hashtags in content
   const renderContent = () => {
     const content = post.content || '';
     const parts = content.split(/(#\w+)/g);
-    
+
     return (
       <Text style={styles.content}>
         {parts.map((part, index) => {
@@ -98,7 +143,14 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
 
       {/* Content */}
       <View style={styles.contentContainer}>
-        {renderContent()}
+        {showTranslation ? (
+          <>
+            <Text style={styles.content}>{translatedContent}</Text>
+            <Text style={styles.translationIndicator}>🌐 Translated from original</Text>
+          </>
+        ) : (
+          renderContent()
+        )}
       </View>
 
       {/* Media */}
@@ -165,6 +217,17 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
         >
           <Text style={styles.actionIcon}>📤</Text>
           <Text style={styles.actionText}>Share</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleTranslate}
+          disabled={isTranslating}
+        >
+          <Text style={styles.actionIcon}>{isTranslating ? '⏳' : '🌐'}</Text>
+          <Text style={[styles.actionText, showTranslation && styles.translationActive]}>
+            {isTranslating ? 'Loading...' : showTranslation ? 'Original' : 'Translate'}
+          </Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -277,5 +340,15 @@ const styles = StyleSheet.create({
   },
   actionTextActive: {
     color: '#06B6D4',
+  },
+  translationIndicator: {
+    fontSize: 12,
+    color: '#A78BFA',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  translationActive: {
+    color: '#A78BFA',
+    fontWeight: '600',
   },
 });
