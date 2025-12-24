@@ -9,6 +9,7 @@ import { LeftNav } from '@/components/feed/LeftNav';
 import { MobileNav } from '@/components/feed/MobileNav';
 import { FeedHeader } from '@/components/feed/FeedHeader';
 import { PostCard } from '@/features/posts';
+import { useStore } from '@/lib/store';
 import type { Post } from '@/lib/store';
 import { formatCount, MockUser } from '@/lib/mock';
 import { FollowersModal, FollowingModal, AvatarUpload, CoverPhotoUpload, getUser, follow, unfollow, getUserPosts, updateUserProfile } from '@/features/users';
@@ -17,7 +18,7 @@ import { PointsDisplay } from '@/components/ui/PointsDisplay';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { getCurrentUser, syncCurrentUser } from '@/lib/currentUser';
 
-type TabType = 'posts' | 'replies' | 'media' | 'saved';
+type TabType = 'posts' | 'replies' | 'saved';
 
 type UserTier = 'SILVER' | 'PLATINUM';
 
@@ -51,72 +52,31 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const params = useParams();
-  const router = useRouter();
   const handle = params?.handle as string;
+  const router = useRouter();
 
-  // Local state for current user (replaces useStore)
-  const [currentUser, setCurrentUser] = useState<MockUser | null>(null);
-
-  // Local state for all posts (replaces useStore.posts)
-  const [allPosts, setAllPosts] = useState<Post[]>([]);
-
-  // Local state for user points (replaces useUserStore)
-  const [userPoints, setUserPoints] = useState<UserPoints | null>(null);
-
+  // Use Zustand store for posts (like feed page does)
+  const { posts: storePosts, initializeFromMock } = useStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
-  const [showFollowersModal, setShowFollowersModal] = useState(false);
-  const [showFollowingModal, setShowFollowingModal] = useState(false);
-  const [isSticky, setIsSticky] = useState(false);
   const [localIsFollowing, setLocalIsFollowing] = useState(false);
   const [localFollowersCount, setLocalFollowersCount] = useState(0);
   const [showEditMenu, setShowEditMenu] = useState(false);
   const [showCoverEditMenu, setShowCoverEditMenu] = useState(false);
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [showFollowingModal, setShowFollowingModal] = useState(false);
+  const [userPoints, setUserPoints] = useState<UserPoints | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-
+  const [isSticky, setIsSticky] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
+  const currentUser = getCurrentUser();
 
-  // Load current user on mount
+  // Initialize store posts on mount
   useEffect(() => {
-    const loadCurrentUser = async () => {
-      await syncCurrentUser();
-      const user = getCurrentUser();
-      setCurrentUser(user);
-    };
-    loadCurrentUser();
-  }, []);
-
-  // Load all posts (replaces useStore.posts)
-  useEffect(() => {
-    const loadPosts = async () => {
-      try {
-        const posts = await postAPI.list({ limit: 100 });
-        // Convert to Post format if needed
-        const postsWithState: Post[] = posts.map((post: any) => ({
-          id: post.id,
-          author: post.author || { id: post.authorId, displayName: 'Unknown', handle: 'unknown', avatar: '' },
-          content: post.content,
-          media: post.mediaUrl ? [{ type: post.mediaType, url: post.mediaUrl }] : undefined,
-          comments: post.commentCount || 0,
-          reactionCount: post.reactionCount || 0,
-          saveCount: post.saveCount || 0,
-          reach_24h: post.reach_24h || 0,
-          reach_all: post.reach_all || 0,
-          timestamp: post.createdAt,
-          reacted: false,
-          saved: false,
-          commentsDisabled: post.commentsDisabled || false,
-          commentLimit: post.commentLimit,
-        }));
-        setAllPosts(postsWithState);
-      } catch (error: any) {
-        console.error('Failed to load posts:', error);
-      }
-    };
-    loadPosts();
-  }, []);
+    initializeFromMock();
+  }, [initializeFromMock]);
 
   // Check both ID and handle to ensure accurate detection even after page refresh
   const isOwnProfile = useMemo(() => {
@@ -176,25 +136,13 @@ export default function ProfilePage() {
     loadProfilePostIds();
   }, [profile, handle, isOwnProfile]);
 
-  // Update allPosts to mark posts as saved based on savedPostIds
-  useEffect(() => {
-    if (savedPostIds.size === 0) return;
-
-    setAllPosts(prevPosts =>
-      prevPosts.map(post => ({
-        ...post,
-        saved: savedPostIds.has(post.id)
-      }))
-    );
-  }, [savedPostIds]);
-
 
   // Merge profileStore posts with global store posts to get full functionality
   const mergedPosts = useMemo(() => {
     if (!profile) return [];
 
     // Find matching posts in global store
-    const merged = allPosts
+    const merged = storePosts
       .filter(post => {
         // Match by author - include ALL posts by this user (including hashtag page posts)
         if (post.author.id !== profile.id) return false;
@@ -219,7 +167,7 @@ export default function ProfilePage() {
       });
 
     return merged;
-  }, [allPosts, profile, profilePostIds]);
+  }, [storePosts, profile, profilePostIds]);
 
   // Load profile data
   useEffect(() => {
@@ -297,8 +245,7 @@ export default function ProfilePage() {
 
   // Function to handle post deletion (instant update)
   const handlePostDelete = async (postId: string) => {
-    // Remove from allPosts immediately for instant UI update
-    setAllPosts(prev => prev.filter(p => p.id !== postId));
+    // The store's deletePost function will handle removing the post
 
     // Refresh user points after deletion
     if (isOwnProfile && currentUser?.id) {
@@ -367,7 +314,7 @@ export default function ProfilePage() {
     // Also check periodically for new posts and saved posts
     const interval = setInterval(updateCounts, 5000); // Increased interval to reduce API load
     return () => clearInterval(interval);
-  }, [allPosts.length, handle, isOwnProfile, profile]);
+  }, [handle, isOwnProfile, profile]);
 
 
 
@@ -392,7 +339,7 @@ export default function ProfilePage() {
 
       // Filter posts that are both in savedPostIds AND marked as saved
       // This ensures consistency
-      return allPosts.filter((post: Post) => {
+      return storePosts.filter((post: Post) => {
         const isInSavedList = savedPostIds.has(post.id);
         const isSavedInStore = post.saved === true;
         return isInSavedList && isSavedInStore;
@@ -411,14 +358,11 @@ export default function ProfilePage() {
         case 'replies':
           // Posts that are replies (start with @)
           return content.startsWith('@');
-        case 'media':
-          // Posts with media
-          return !!post.media;
         default:
           return true;
       }
     });
-  }, [mergedPosts, activeTab, isOwnProfile, savedPostIds, allPosts]);
+  }, [mergedPosts, activeTab, isOwnProfile, savedPostIds, storePosts]);
 
   const handleFollow = async () => {
     if (!profile) return;
@@ -834,7 +778,6 @@ export default function ProfilePage() {
             {([
               'posts',
               'replies',
-              'media',
               ...(isOwnProfile ? ['saved'] as TabType[] : [])
             ] as TabType[]).map((tab) => (
               <button
@@ -847,8 +790,7 @@ export default function ProfilePage() {
               >
                 {tab === 'posts' ? 'Recent Posts' :
                   tab === 'replies' ? 'Replies' :
-                    tab === 'media' ? 'Media' :
-                      tab === 'saved' ? 'Saved' : tab}
+                    tab === 'saved' ? 'Saved' : tab}
               </button>
             ))}
           </div>
@@ -871,7 +813,6 @@ export default function ProfilePage() {
               <div className="text-gray-500 mb-2">
                 {activeTab === 'posts' && 'No posts yet'}
                 {activeTab === 'replies' && 'No replies yet'}
-                {activeTab === 'media' && 'No media yet'}
                 {activeTab === 'saved' && 'No saved posts yet'}
               </div>
               <p className="text-sm text-gray-400">

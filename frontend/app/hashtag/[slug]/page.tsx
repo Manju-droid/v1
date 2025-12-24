@@ -9,7 +9,6 @@ import { FeedHeader } from '@/components/feed/FeedHeader';
 import { useStore, Post } from '@/lib/store';
 import { useToast } from '@/components/ui/Toast';
 import { PostCard } from '@/features/posts';
-import { currentUserMock } from '@/lib/store';
 import Image from 'next/image';
 import { hashtagAPI, userAPI, postAPI } from '@v/api-client';
 
@@ -24,6 +23,8 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
   const slug = resolvedParams.slug;
   const { addPost } = useStore(); // Keep addPost for optimistic updates if needed, or use API directly
   const { addToast } = useToast();
+  const currentUser = useStore(state => state.currentUser);
+  const syncCurrentUser = useStore(state => state.syncCurrentUser);
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('top');
@@ -41,6 +42,11 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
   const [posts, setPosts] = useState<any[]>([]);
   const [topUsers, setTopUsers] = useState<any[]>([]);
 
+  // Sync current user on mount
+  useEffect(() => {
+    syncCurrentUser();
+  }, [syncCurrentUser]);
+
   // Fetch hashtag data and posts
   useEffect(() => {
     const loadData = async () => {
@@ -51,7 +57,18 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
         try {
           const hashtagData = await hashtagAPI.getBySlug(slug);
           if (hashtagData) {
-            setHashtag(hashtagData);
+            // Backend returns { hashtag: {...}, boosts, shouts, momentum }
+            const h = hashtagData.hashtag || hashtagData;
+            const name = h.name || slug.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+
+            setHashtag({
+              ...h,
+              name: name,
+              slug: slug,
+              posts: h.posts || 0,
+              followers: h.followers || 0,
+              description: h.description || '',
+            });
           } else {
             // Fallback if not found (or create new)
             setHashtag({
@@ -75,6 +92,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
 
         // Fetch posts for hashtag
         const postsData = await hashtagAPI.getPosts(slug);
+        console.log('[Hashtag Detail] Posts from API:', postsData);
         if (postsData) {
           setPosts(postsData);
         }
@@ -82,7 +100,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
         // Fetch top users
         const usersData = await userAPI.list({ limit: 5 });
         if (usersData) {
-          setTopUsers(usersData.filter((u: any) => currentUserMock && u.id !== currentUserMock.id));
+          setTopUsers(usersData.filter((u: any) => currentUser && u.id !== currentUser.id));
         }
 
       } catch (error) {
@@ -222,15 +240,22 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
     const content = `${composerText} #boost #${hashtag.name}`;
 
     try {
-      if (!currentUserMock?.id) {
+      if (!currentUser?.id) {
         addToast('Please log in to post', 'error');
         return;
       }
-      await postAPI.create({ authorId: currentUserMock.id, content });
+      const newPost = await postAPI.create({ authorId: currentUser.id, content });
+
+      // Link post to hashtag
+      if (newPost && newPost.id) {
+        await hashtagAPI.addPost(slug, newPost.id, true); // true = isBoost
+      }
+
 
       // Refresh posts
       const postsData = await hashtagAPI.getPosts(slug);
-      setPosts(postsData);
+      const validPosts = (postsData as any[]).filter((post: any) => post.author && post.author.id);
+      setPosts(validPosts);
 
       setComposerText('');
       addToast('Boosted!', 'success');
@@ -249,15 +274,21 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
     const content = `${composerText} #shout #${hashtag.name}`;
 
     try {
-      if (!currentUserMock?.id) {
+      if (!currentUser?.id) {
         addToast('Please log in to post', 'error');
         return;
       }
-      await postAPI.create({ authorId: currentUserMock.id, content });
+      const newPost = await postAPI.create({ authorId: currentUser.id, content });
+
+      //Link post to hashtag
+      if (newPost && newPost.id) {
+        await hashtagAPI.addPost(slug, newPost.id, false); // false = isShout
+      }
 
       // Refresh posts
       const postsData = await hashtagAPI.getPosts(slug);
-      setPosts(postsData);
+      const validPosts = (postsData as any[]).filter((post: any) => post.author && post.author.id);
+      setPosts(validPosts);
 
       setComposerText('');
       addToast('Shouted!', 'success');
@@ -284,6 +315,12 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
       }
       return newSet;
     });
+  };
+
+  const handleDelete = (postId: string) => {
+    // Remove post from local state immediately
+    setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+    addToast('Post deleted', 'success');
   };
 
   const handleQuote = (postId: string) => {
@@ -590,6 +627,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
                         key={post.id}
                         post={post}
                         onQuote={handleQuote}
+                        onDelete={handleDelete}
                         source="hashtag"
                       />
                     ))}
@@ -619,13 +657,19 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
                   const isFollowing = followingUsers.has(user.id);
                   return (
                     <div key={user.id} className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-                        <Image
-                          src={user.avatar}
-                          alt={user.displayName}
-                          fill
-                          className="object-cover"
-                        />
+                      <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-gray-700">
+                        {user.avatar && user.avatar.trim() !== '' ? (
+                          <Image
+                            src={user.avatar}
+                            alt={user.displayName}
+                            fill
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-lg font-semibold">
+                            {user.displayName?.charAt(0)?.toUpperCase() || '?'}
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-white text-sm truncate">

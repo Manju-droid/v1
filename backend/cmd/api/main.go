@@ -231,7 +231,7 @@ func NewServer(cfg *config.Config) *Server {
 	userHandlers := api.NewUserHandlers(userRepo)
 	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService)
 	messageHandlers := api.NewMessageHandlers(messageRepo)
-	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, hub)
+	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, userRepo, hub)
 	debateHandlers := api.NewDebateHandlers(debateRepo, userRepo, pointsService, hub)
 	debateStatsHandlers := api.NewDebateStatsHandlers(debateStatsRepo)
 

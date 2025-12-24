@@ -7,7 +7,7 @@ import { LeftNav } from '@/components/feed/LeftNav';
 import { MobileNav } from '@/components/feed/MobileNav';
 import { FeedHeader } from '@/components/feed/FeedHeader';
 import { useToast } from '@/components/ui/Toast';
-import { currentUserMock } from '@/lib/store';
+import { useStore } from '@/lib/store';
 import { hashtagAPI } from '@v/api-client';
 import { useSignaling } from '@/features/debates';
 
@@ -30,6 +30,8 @@ type SortDirection = 'asc' | 'desc';
 export default function LocalHashtagHubPage() {
   const router = useRouter();
   const { addToast } = useToast();
+  const currentUser = useStore(state => state.currentUser);
+  const syncCurrentUser = useStore(state => state.syncCurrentUser);
   const [hashtags, setHashtags] = useState<LocalHashtag[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +44,7 @@ export default function LocalHashtagHubPage() {
   // WebSocket connection for real-time hashtag updates
   const { isConnected: wsConnected, setOnMessage } = useSignaling(
     'hashtags-list', // Special room for hashtags list updates
-    currentUserMock?.id || 'anonymous'
+    currentUser?.id || 'anonymous'
   );
 
   // Fetch hashtags from API
@@ -51,19 +53,27 @@ export default function LocalHashtagHubPage() {
       setLoading(true);
       const data = await hashtagAPI.list();
       console.log('[Hashtags Page] Loaded hashtags:', data);
-      
+
       if (data && Array.isArray(data) && data.length > 0) {
-        const formattedHashtags: LocalHashtag[] = data.map((h: any) => ({
-          slug: h.slug,
-          name: h.name,
-          posts: h.posts || 0,
-          boosts: h.boosts || 0,
-          shouts: h.shouts || 0,
-          momentum: h.momentum !== undefined ? h.momentum : ((h.boosts || 0) - (h.shouts || 0)),
-          isTrending: (h.posts || 0) > 100, // Simple threshold for now
-          createdBy: h.createdBy,
-        }));
-        console.log('[Hashtags Page] Formatted hashtags:', formattedHashtags.length);
+        const formattedHashtags: LocalHashtag[] = data.map((item: any) => {
+          // Backend nests hashtag: { hashtag: {...}, boosts, shouts, momentum }
+          const h = item.hashtag || item;
+
+          // Fallback: if name is missing, derive it from slug
+          const name = h.name || h.slug?.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Unknown';
+
+          return {
+            slug: h.slug,
+            name: name,
+            posts: h.posts || item.posts || 0,
+            boosts: item.boosts !== undefined ? item.boosts : (h.boosts || 0),
+            shouts: item.shouts !== undefined ? item.shouts : (h.shouts || 0),
+            momentum: item.momentum !== undefined ? item.momentum : ((item.boosts || 0) - (item.shouts || 0)),
+            isTrending: (h.posts || item.posts || 0) > 100,
+            createdBy: h.createdBy,
+          };
+        });
+        console.log('[Hashtags Page] Formatted hashtags:', formattedHashtags);
         setHashtags(formattedHashtags);
       } else {
         console.log('[Hashtags Page] No hashtags found or empty array');
@@ -83,9 +93,14 @@ export default function LocalHashtagHubPage() {
     loadHashtags();
   }, [loadHashtags]);
 
+  // Sync current user on mount
+  useEffect(() => {
+    syncCurrentUser();
+  }, [syncCurrentUser]);
+
   // Listen for real-time hashtag creation/updates via WebSocket
   useEffect(() => {
-    const userId = currentUserMock?.id || 'anonymous';
+    const userId = currentUser?.id || 'anonymous';
     console.log('[Hashtags Page] Setting up WebSocket listener', {
       wsConnected,
       userId,
@@ -94,7 +109,7 @@ export default function LocalHashtagHubPage() {
 
     setOnMessage((message: any) => {
       console.log('[Hashtags Page] Received WebSocket message:', message.type, message);
-      
+
       if (message.type === 'hashtag:created') {
         console.log('[Hashtags Page] New hashtag created, refreshing list...', message.hashtag);
         // Refresh the hashtags list to include the new hashtag
@@ -104,9 +119,9 @@ export default function LocalHashtagHubPage() {
 
     return () => {
       console.log('[Hashtags Page] Cleaning up WebSocket listener');
-      setOnMessage(() => {}); // Clear handler on unmount
+      setOnMessage(() => { }); // Clear handler on unmount
     };
-  }, [setOnMessage, loadHashtags, currentUserMock?.id]);
+  }, [setOnMessage, loadHashtags, currentUser?.id]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -210,17 +225,17 @@ export default function LocalHashtagHubPage() {
     }
 
     try {
-      if (!currentUserMock?.id) {
+      if (!currentUser?.id) {
         addToast('You must be logged in to create a hashtag', 'error');
         return;
       }
 
-      console.log('[Hashtag Create] Creating hashtag:', { name: cleanName, slug, createdBy: currentUserMock.id });
-      
+      console.log('[Hashtag Create] Creating hashtag:', { name: cleanName, slug, createdBy: currentUser.id });
+
       const newHashtag = await hashtagAPI.create({
         name: cleanName,
         slug: slug,
-        createdBy: currentUserMock.id,
+        createdBy: currentUser.id,
       });
 
       console.log('[Hashtag Create] API response:', newHashtag);
@@ -228,13 +243,15 @@ export default function LocalHashtagHubPage() {
       if (newHashtag && newHashtag.slug) {
         const formattedHashtag: LocalHashtag = {
           slug: newHashtag.slug,
-          name: newHashtag.name,
+          name: newHashtag.name || cleanName, // Fallback to cleanName if backend doesn't return name
           posts: 0,
           boosts: 0,
           shouts: 0,
           momentum: 0,
-          createdBy: newHashtag.createdBy || currentUserMock.id,
+          createdBy: newHashtag.createdBy || currentUser.id,
         };
+
+        console.log('[Hashtag Create] Formatted hashtag:', formattedHashtag);
 
         setHashtags([formattedHashtag, ...hashtags]);
         setShowCreateModal(false);
@@ -254,7 +271,7 @@ export default function LocalHashtagHubPage() {
   const handleDeleteLocalHashtag = async (slug: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
     const hashtag = hashtags.find(h => h.slug === slug);
-    if (hashtag && currentUserMock && hashtag.createdBy === currentUserMock.id) {
+    if (hashtag && currentUser && hashtag.createdBy === currentUser.id) {
       try {
         await hashtagAPI.delete(slug);
         setHashtags(hashtags.filter(h => h.slug !== slug));
@@ -423,9 +440,9 @@ export default function LocalHashtagHubPage() {
                           </td>
                         </tr>
                       ) : (
-                        filteredAndSortedLocalHashtags.map((hashtag) => (
+                        filteredAndSortedLocalHashtags.map((hashtag, index) => (
                           <tr
-                            key={hashtag.slug}
+                            key={hashtag.slug || `hashtag-${index}`}
                             onClick={() => handleRowClick(hashtag.slug)}
                             className="border-b border-white/[0.08] hover:bg-gray-800/30 cursor-pointer transition-colors relative"
                             style={{ zIndex: openMenuSlug === hashtag.slug ? 10 : 1 }}
@@ -444,7 +461,7 @@ export default function LocalHashtagHubPage() {
                             <td className="px-6 py-4 text-center text-gray-300 tabular-nums font-medium w-24">{hashtag.boosts}</td>
                             <td className="px-6 py-4 text-center text-gray-300 tabular-nums font-medium w-24 relative" onClick={(e) => e.stopPropagation()}>
                               {hashtag.shouts}
-                              {currentUserMock && hashtag.createdBy === currentUserMock.id && (
+                              {currentUser && hashtag.createdBy === currentUser.id && (
                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 hashtag-menu" style={{ zIndex: 100 }}>
                                   <button
                                     onClick={(e) => {
@@ -507,9 +524,9 @@ export default function LocalHashtagHubPage() {
                       </div>
                     </div>
                   ) : (
-                    filteredAndSortedLocalHashtags.map((hashtag) => (
+                    filteredAndSortedLocalHashtags.map((hashtag, index) => (
                       <motion.div
-                        key={hashtag.slug}
+                        key={hashtag.slug || `hashtag-mobile-${index}`}
                         onClick={() => handleRowClick(hashtag.slug)}
                         whileHover={{ scale: 1.01 }}
                         className="bg-[#1F2937] border border-white/[0.08] rounded-xl p-4 cursor-pointer relative"
@@ -523,7 +540,7 @@ export default function LocalHashtagHubPage() {
                             }`}>
                             #{hashtag.name}
                           </span>
-                          {currentUserMock && hashtag.createdBy === currentUserMock.id && (
+                          {currentUser && hashtag.createdBy === currentUser.id && (
                             <div className="relative hashtag-menu" style={{ zIndex: 100 }}>
                               <button
                                 onClick={(e) => {

@@ -178,8 +178,8 @@ export const useStore = create<AppState>((set, get) => ({
             reach_24h: post.reach_24h || 0,
             reach_all: post.reach_all || 0,
             timestamp: post.createdAt,
-            reacted: false, // TODO: Check if current user reacted
-            saved: false,   // TODO: Check if current user saved
+            reacted: post.reacted || false, // Use backend provided state or default to false
+            saved: post.saved || false,     // Use backend provided state or default to false
             commentsDisabled: post.commentsDisabled || false,
             commentLimit: post.commentLimit,
           };

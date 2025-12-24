@@ -17,12 +17,12 @@ export const hashtagAPI = {
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.offset) queryParams.append('offset', params.offset.toString());
       if (params?.search) queryParams.append('search', params.search);
-      
+
       const queryString = queryParams.toString();
       const endpoint = `/hashtags${queryString ? `?${queryString}` : ''}`;
-      
+
       const data = await apiClient.get<any>(endpoint);
-      
+
       // Handle both array and object with hashtags property
       if (Array.isArray(data)) {
         return data;
@@ -65,12 +65,12 @@ export const hashtagAPI = {
       const queryParams = new URLSearchParams();
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.offset) queryParams.append('offset', params.offset.toString());
-      
+
       const queryString = queryParams.toString();
       const endpoint = `/hashtags/${slug}/posts${queryString ? `?${queryString}` : ''}`;
-      
+
       const data = await apiClient.get<any>(endpoint);
-      
+
       if (Array.isArray(data)) {
         return data;
       } else if (data && Array.isArray(data.posts)) {
@@ -81,5 +81,12 @@ export const hashtagAPI = {
       console.error('[Hashtag API] Error fetching posts:', error);
       throw error;
     }
+  },
+
+  /**
+   * Add a post to a hashtag
+   */
+  addPost: (slug: string, postId: string, isBoost: boolean): Promise<void> => {
+    return apiClient.post<void>(`/hashtags/${slug}/posts`, { postId, isBoost });
   },
 };

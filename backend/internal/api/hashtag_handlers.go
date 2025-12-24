@@ -16,12 +16,17 @@ import (
 )
 
 type HashtagHandlers struct {
-	repo repository.HashtagRepository
-	hub  *service.Hub
+	repo     repository.HashtagRepository
+	userRepo repository.UserRepository
+	hub      *service.Hub
 }
 
-func NewHashtagHandlers(repo repository.HashtagRepository, hub *service.Hub) *HashtagHandlers {
-	return &HashtagHandlers{repo: repo, hub: hub}
+func NewHashtagHandlers(repo repository.HashtagRepository, userRepo repository.UserRepository, hub *service.Hub) *HashtagHandlers {
+	return &HashtagHandlers{
+		repo:     repo,
+		userRepo: userRepo,
+		hub:      hub,
+	}
 }
 
 func (h *HashtagHandlers) Create(w http.ResponseWriter, r *http.Request) {
@@ -97,9 +102,9 @@ func (h *HashtagHandlers) GetBySlug(w http.ResponseWriter, r *http.Request) {
 	boosts, shouts, _ := h.repo.GetHashtagStats(hashtag.ID)
 
 	response := map[string]interface{}{
-		"hashtag": hashtag,
-		"boosts":  boosts,
-		"shouts":  shouts,
+		"hashtag":  hashtag,
+		"boosts":   boosts,
+		"shouts":   shouts,
 		"momentum": boosts - shouts,
 	}
 
@@ -128,9 +133,9 @@ func (h *HashtagHandlers) List(w http.ResponseWriter, r *http.Request) {
 	for _, hashtag := range hashtags {
 		boosts, shouts, _ := h.repo.GetHashtagStats(hashtag.ID)
 		hashtagsWithStats = append(hashtagsWithStats, map[string]interface{}{
-			"hashtag": hashtag,
-			"boosts":  boosts,
-			"shouts":  shouts,
+			"hashtag":  hashtag,
+			"boosts":   boosts,
+			"shouts":   shouts,
 			"momentum": boosts - shouts,
 		})
 	}
@@ -206,6 +211,31 @@ func (h *HashtagHandlers) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSON(w, http.StatusOK, posts)
-}
+	// Populate author data for each post
+	enrichedPosts := make([]map[string]interface{}, 0, len(posts))
+	for _, post := range posts {
+		author, err := h.userRepo.GetByID(post.AuthorID)
+		if err != nil {
+			// Skip posts with missing authors
+			continue
+		}
 
+		enrichedPosts = append(enrichedPosts, map[string]interface{}{
+			"id":           post.ID,
+			"content":      post.Content,
+			"author":       author,
+			"timestamp":    post.CreatedAt,
+			"reactions":    0, // TODO: get actual reaction count
+			"comments":     0, // TODO: get actual comment count
+			"commentCount": 0,
+			"saves":        0, // TODO: get actual save count
+			"saveCount":    0,
+			"mediaType":    post.MediaType,
+			"mediaUrl":     post.MediaURL,
+			"createdAt":    post.CreatedAt,
+			"updatedAt":    post.UpdatedAt,
+		})
+	}
+
+	JSON(w, http.StatusOK, enrichedPosts)
+}

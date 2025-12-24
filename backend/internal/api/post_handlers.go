@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/yourusername/v-backend/internal/auth"
 	"github.com/yourusername/v-backend/internal/models"
 	"github.com/yourusername/v-backend/internal/repository"
 	"github.com/yourusername/v-backend/internal/service"
@@ -174,8 +175,58 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Enrich posts with author data and reaction status
+	enrichedPosts := make([]map[string]interface{}, 0, len(posts))
+
+	// Check for optional authentication to determine reaction status
+	var currentUserID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			currentUserID = claims.UserID
+		}
+	}
+
+	for _, post := range posts {
+		author, err := h.userRepo.GetByID(post.AuthorID)
+		if err != nil {
+			// Skip posts with missing authors
+			continue
+		}
+
+		var reacted, saved bool
+		if currentUserID != "" {
+			reacted, _ = h.repo.HasReacted(currentUserID, post.ID, nil)
+			saved, _ = h.repo.IsSaved(currentUserID, post.ID)
+		}
+
+		enrichedPosts = append(enrichedPosts, map[string]interface{}{
+			"id":                post.ID,
+			"authorId":          post.AuthorID,
+			"author":            author,
+			"content":           post.Content,
+			"mediaType":         post.MediaType,
+			"mediaUrl":          post.MediaURL,
+			"commentsDisabled":  post.CommentsDisabled,
+			"commentLimit":      post.CommentLimit,
+			"status":            post.Status,
+			"reportCount":       post.ReportCount,
+			"inModerationQueue": post.InModerationQueue,
+			"reactionCount":     post.ReactionCount,
+			"commentCount":      post.CommentCount,
+			"saveCount":         post.SaveCount,
+			"reach_24h":         post.Reach24h,
+			"reach_all":         post.ReachAll,
+			"createdAt":         post.CreatedAt,
+			"updatedAt":         post.UpdatedAt,
+			"reacted":           reacted,
+			"saved":             saved,
+		})
+	}
+
 	JSON(w, http.StatusOK, map[string]interface{}{
-		"posts":  posts,
+		"posts":  enrichedPosts,
 		"limit":  limit,
 		"offset": offset,
 	})
