@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { DebateCarousel, QuickStats, useDebateStore, useSignaling } from '@/features/debates';
+import { DebateCarousel, QuickStats, useDebateStore, useSignaling, LockExplainerModal } from '@/features/debates';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
@@ -19,6 +19,7 @@ export default function DebatesPage() {
   const pathname = usePathname();
   const { showToast } = useToast();
   const [showCreateDebateModal, setShowCreateDebateModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
   const [debates, setDebates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [registeredDebates, setRegisteredDebates] = useState<Set<string>>(new Set());
@@ -320,20 +321,23 @@ export default function DebatesPage() {
   };
 
   const handleCreateDebate = () => {
+    // Soft-lock Phase 1: Prevent creation and show explainer
+    setShowLockModal(true);
+    return;
+
+    /* 
+    // Original Logic preserved for Phase 2
     if (!currentUser?.id) {
       showToast('Please log in to create a debate', 'error');
       router.push('/login?next=/debates');
       return;
     }
     if (!canHostDebate) {
-      if (!isPlatinumUser) {
-        showToast('You have reached your daily debate hosting limit. Upgrade to Platinum for unlimited hosting.', 'info');
-      } else {
-        showToast('Unable to create debate', 'error');
-      }
-      return;
+       // ... existing logic ...
+       return;
     }
     router.push('/debates/create');
+    */
   };
 
   return (
@@ -649,6 +653,11 @@ export default function DebatesPage() {
           </motion.button>
         </div>
       </div>
+      <LockExplainerModal
+        isOpen={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        unlockPhase={2}
+      />
     </div>
   );
 }

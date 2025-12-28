@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/yourusername/v-backend/internal/auth"
 	"github.com/yourusername/v-backend/internal/models"
 	"github.com/yourusername/v-backend/internal/repository"
 	"github.com/yourusername/v-backend/internal/service"
@@ -18,13 +19,15 @@ import (
 type HashtagHandlers struct {
 	repo     repository.HashtagRepository
 	userRepo repository.UserRepository
+	postRepo repository.PostRepository
 	hub      *service.Hub
 }
 
-func NewHashtagHandlers(repo repository.HashtagRepository, userRepo repository.UserRepository, hub *service.Hub) *HashtagHandlers {
+func NewHashtagHandlers(repo repository.HashtagRepository, userRepo repository.UserRepository, postRepo repository.PostRepository, hub *service.Hub) *HashtagHandlers {
 	return &HashtagHandlers{
 		repo:     repo,
 		userRepo: userRepo,
+		postRepo: postRepo,
 		hub:      hub,
 	}
 }
@@ -98,14 +101,31 @@ func (h *HashtagHandlers) GetBySlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for optional authentication to determine following status
+	var currentUserID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			currentUserID = claims.UserID
+		}
+	}
+
+	isFollowing := false
+	if currentUserID != "" {
+		isFollowing, _ = h.repo.IsFollowing(currentUserID, hashtag.ID)
+	}
+
 	// Get stats
 	boosts, shouts, _ := h.repo.GetHashtagStats(hashtag.ID)
 
 	response := map[string]interface{}{
-		"hashtag":  hashtag,
-		"boosts":   boosts,
-		"shouts":   shouts,
-		"momentum": boosts - shouts,
+		"hashtag":     hashtag,
+		"boosts":      boosts,
+		"shouts":      shouts,
+		"momentum":    boosts - shouts,
+		"isFollowing": isFollowing,
+		"followers":   hashtag.Followers,
 	}
 
 	JSON(w, http.StatusOK, response)
@@ -128,15 +148,31 @@ func (h *HashtagHandlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add stats to each hashtag
+	// Check for optional authentication
+	var currentUserID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			currentUserID = claims.UserID
+		}
+	}
+
 	hashtagsWithStats := make([]map[string]interface{}, 0, len(hashtags))
 	for _, hashtag := range hashtags {
 		boosts, shouts, _ := h.repo.GetHashtagStats(hashtag.ID)
+		isFollowing := false
+		if currentUserID != "" {
+			isFollowing, _ = h.repo.IsFollowing(currentUserID, hashtag.ID)
+		}
+
 		hashtagsWithStats = append(hashtagsWithStats, map[string]interface{}{
-			"hashtag":  hashtag,
-			"boosts":   boosts,
-			"shouts":   shouts,
-			"momentum": boosts - shouts,
+			"hashtag":     hashtag,
+			"boosts":      boosts,
+			"shouts":      shouts,
+			"momentum":    boosts - shouts,
+			"isFollowing": isFollowing,
+			"followers":   hashtag.Followers,
 		})
 	}
 
@@ -220,16 +256,36 @@ func (h *HashtagHandlers) GetPosts(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Check for optional authentication to determine reaction status
+		var currentUserID string
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			tokenString := authHeader[7:]
+			if claims, err := auth.ValidateToken(tokenString); err == nil {
+				currentUserID = claims.UserID
+			}
+		}
+
+		isLiked := false
+		isSaved := false
+		if currentUserID != "" {
+			isLiked, _ = h.postRepo.HasReacted(currentUserID, post.ID, nil)
+			isSaved, _ = h.postRepo.IsSaved(currentUserID, post.ID)
+		}
+
 		enrichedPosts = append(enrichedPosts, map[string]interface{}{
 			"id":           post.ID,
 			"content":      post.Content,
 			"author":       author,
 			"timestamp":    post.CreatedAt,
-			"reactions":    0, // TODO: get actual reaction count
-			"comments":     0, // TODO: get actual comment count
-			"commentCount": 0,
-			"saves":        0, // TODO: get actual save count
-			"saveCount":    0,
+			"reactions":    post.ReactionCount,
+			"comments":     post.CommentCount,
+			"commentCount": post.CommentCount,
+			"saves":        post.SaveCount,
+			"saveCount":    post.SaveCount,
+			"isLiked":      isLiked,
+			"isSaved":      isSaved,
+			"hasReacted":   isLiked, // Some frontends use this
 			"mediaType":    post.MediaType,
 			"mediaUrl":     post.MediaURL,
 			"createdAt":    post.CreatedAt,
@@ -238,4 +294,68 @@ func (h *HashtagHandlers) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSON(w, http.StatusOK, enrichedPosts)
+}
+
+func (h *HashtagHandlers) Follow(w http.ResponseWriter, r *http.Request) {
+	// Extract User ID from token manually since auth.GetUserID is not available
+	var userID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			userID = claims.UserID
+		}
+	}
+
+	if userID == "" {
+		Error(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	slug := chi.URLParam(r, "slug")
+
+	hashtag, err := h.repo.GetBySlug(slug)
+	if err != nil {
+		Error(w, http.StatusNotFound, "Hashtag not found")
+		return
+	}
+
+	if err := h.repo.FollowHashtag(userID, hashtag.ID); err != nil {
+		Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(w, "Followed hashtag")
+}
+
+func (h *HashtagHandlers) Unfollow(w http.ResponseWriter, r *http.Request) {
+	// Extract User ID from token manually
+	var userID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			userID = claims.UserID
+		}
+	}
+
+	if userID == "" {
+		Error(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	slug := chi.URLParam(r, "slug")
+
+	hashtag, err := h.repo.GetBySlug(slug)
+	if err != nil {
+		Error(w, http.StatusNotFound, "Hashtag not found")
+		return
+	}
+
+	if err := h.repo.UnfollowHashtag(userID, hashtag.ID); err != nil {
+		Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	Success(w, "Unfollowed hashtag")
 }

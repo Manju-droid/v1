@@ -194,7 +194,7 @@ func NewServer(cfg *config.Config) *Server {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Cache-Control", "Pragma", "Expires"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -229,9 +229,9 @@ func NewServer(cfg *config.Config) *Server {
 	// Initialize handlers
 	authHandlers := api.NewAuthHandlers(authRepo, userRepo, pointsService, notifRepo)
 	userHandlers := api.NewUserHandlers(userRepo)
-	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService)
+	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService, hashtagRepo)
 	messageHandlers := api.NewMessageHandlers(messageRepo)
-	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, userRepo, hub)
+	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, userRepo, postRepo, hub)
 	debateHandlers := api.NewDebateHandlers(debateRepo, userRepo, pointsService, hub)
 	debateStatsHandlers := api.NewDebateStatsHandlers(debateStatsRepo)
 
@@ -365,6 +365,10 @@ func NewServer(cfg *config.Config) *Server {
 			r.Post("/", hashtagHandlers.Create)
 			r.Get("/{slug}", hashtagHandlers.GetBySlug)
 			r.Delete("/{slug}", hashtagHandlers.Delete)
+
+			// Follow/Unfollow routes
+			r.Post("/{slug}/follow", hashtagHandlers.Follow)
+			r.Delete("/{slug}/follow", hashtagHandlers.Unfollow)
 
 			// Post linking
 			r.Post("/{slug}/posts", hashtagHandlers.AddPost)

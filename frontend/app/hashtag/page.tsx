@@ -575,7 +575,7 @@ export default function LocalHashtagHubPage() {
                             </div>
                           )}
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                           <div>
                             <div className="text-xs text-gray-500 mb-1">Posts</div>
                             <div className="text-gray-300 font-medium">{hashtag.posts}</div>

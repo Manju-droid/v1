@@ -28,7 +28,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('top');
-  const [isFollowing, setIsFollowing] = useState(false);
+
   const [composerText, setComposerText] = useState('');
   const [displayedCount, setDisplayedCount] = useState(POSTS_PER_PAGE);
   const [isLoading, setIsLoading] = useState(true);
@@ -298,10 +298,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
     }
   };
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing);
-    addToast(isFollowing ? 'Unfollowed hashtag' : 'Following hashtag', 'success');
-  };
+
 
   const handleFollowUser = (userId: string) => {
     setFollowingUsers(prev => {
@@ -394,17 +391,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
                   </div>
                   {/* Desktop: Follow and Sort on same row */}
                   <div className="hidden md:flex items-center gap-3">
-                    <motion.button
-                      onClick={handleFollow}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`px-6 py-2 rounded-lg font-medium transition-all text-sm ${isFollowing
-                        ? 'bg-[#1F2937] text-gray-300 hover:bg-gray-700 border border-white/[0.08]'
-                        : 'bg-[#1F2937] text-white hover:bg-gray-700 border border-white/[0.08]'
-                        }`}
-                    >
-                      {isFollowing ? 'Unfollow' : 'Follow'}
-                    </motion.button>
+
                     <div className="relative" ref={sortMenuRef}>
                       <button
                         onClick={() => setShowSortMenu(!showSortMenu)}
@@ -462,20 +449,6 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
                   <span>•</span>
                   <div>
                     <span className="font-semibold text-white">{actualStats.shouts}</span> shouts
-                  </div>
-                  {/* Mobile: Follow button below stats */}
-                  <div className="md:hidden ml-auto">
-                    <motion.button
-                      onClick={handleFollow}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${isFollowing
-                        ? 'bg-[#1F2937] text-gray-300 hover:bg-gray-700 border border-white/[0.08]'
-                        : 'bg-[#1F2937] text-white hover:bg-gray-700 border border-white/[0.08]'
-                        }`}
-                    >
-                      {isFollowing ? 'Unfollow' : 'Follow'}
-                    </motion.button>
                   </div>
                 </div>
 
@@ -628,6 +601,28 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
                         post={post}
                         onQuote={handleQuote}
                         onDelete={handleDelete}
+                        onReact={() => {
+                          setPosts(prevPosts => prevPosts.map(p => {
+                            if (p.id === post.id) {
+                              // Toggle reaction locally
+                              const newReacted = !p.reacted;
+                              const newCount = (p.reactionCount || 0) + (newReacted ? 1 : -1);
+                              return { ...p, reacted: newReacted, reactionCount: Math.max(0, newCount) };
+                            }
+                            return p;
+                          }));
+                        }}
+                        onSaveChange={() => {
+                          setPosts(prevPosts => prevPosts.map(p => {
+                            if (p.id === post.id) {
+                              // Toggle save locally
+                              const newSaved = !p.saved;
+                              const newCount = (p.saveCount || 0) + (newSaved ? 1 : -1);
+                              return { ...p, saved: newSaved, saveCount: Math.max(0, newCount) };
+                            }
+                            return p;
+                          }));
+                        }}
                         source="hashtag"
                       />
                     ))}
@@ -705,7 +700,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
 
         {/* Mobile Navigation */}
         <MobileNav />
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }

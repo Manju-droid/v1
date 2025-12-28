@@ -8,6 +8,7 @@ type Hashtag struct {
 	Slug      string    `json:"slug"`
 	CreatedBy string    `json:"createdBy"`
 	CreatedAt time.Time `json:"createdAt"`
+	Followers int       `json:"followers"`
 }
 
 type HashtagPost struct {
@@ -16,4 +17,3 @@ type HashtagPost struct {
 	IsBoost   bool      `json:"isBoost"` // true for boost, false for shout
 	CreatedAt time.Time `json:"createdAt"`
 }
-

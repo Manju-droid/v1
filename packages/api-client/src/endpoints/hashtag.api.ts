@@ -89,4 +89,18 @@ export const hashtagAPI = {
   addPost: (slug: string, postId: string, isBoost: boolean): Promise<void> => {
     return apiClient.post<void>(`/hashtags/${slug}/posts`, { postId, isBoost });
   },
+
+  /**
+   * Follow a hashtag
+   */
+  follow: (slug: string): Promise<void> => {
+    return apiClient.post<void>(`/hashtags/${slug}/follow`, {});
+  },
+
+  /**
+   * Unfollow a hashtag
+   */
+  unfollow: (slug: string): Promise<void> => {
+    return apiClient.delete<void>(`/hashtags/${slug}/follow`);
+  },
 };

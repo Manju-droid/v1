@@ -4,12 +4,12 @@ import React, { useState, useEffect, use, useRef, useCallback, useMemo } from 'r
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { useDebateRoomStore, useDebateStore, JoinDebateModal, MicrophonePermissionModal, UserOptionsModal, useSignaling, useDebateWebRTC, type DebateRole } from '@/features/debates';
+import { useDebateRoomStore, useDebateStore, JoinDebateModal, MicrophonePermissionModal, UserOptionsModal, useSignaling, useDebateWebRTC, type DebateRole, LockExplainerModal } from '@/features/debates';
 import { useStore } from '@/lib/store';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/features/auth';
 import { debateAPI, debateStatsAPI } from '@v/api-client';
-import { generateMockParticipants } from '@/lib/mock-debates';
+import { generateMockParticipants, getDebateById } from '@/lib/mock-debates';
 import { useAudioStream } from '@/hooks/useAudioStream';
 import { AudioPlayer } from '@/components/AudioPlayer';
 
@@ -50,6 +50,7 @@ export default function DebateRoomPage({ params }: { params: Promise<{ id: strin
   // Initialize showJoinModal based on localStorage to prevent showing modal if user has a stored side
   // Always start as false - we'll check localStorage in useEffect to decide if we should show it
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
   const [showMicPermissionModal, setShowMicPermissionModal] = useState(false);
   const [showEndDebateModal, setShowEndDebateModal] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -246,7 +247,44 @@ export default function DebateRoomPage({ params }: { params: Promise<{ id: strin
         console.log('Fetching debate data...');
         isFetchingRef.current = true;
         setLoading(true);
+
+        // OPTIMIZATION: Check mock registry FIRST. 
+        // If this is a known mock debate (simulation), use local data and skip API call.
+        // This prevents 404 errors from the backend for simulation content.
+        const mockFallback = getDebateById(debateId);
+        if (mockFallback) {
+          console.log('[DebateRoom] Identified as mock/simulation debate, using local data:', debateId);
+
+          if (mockFallback.isLocked) {
+            console.log('[DebateRoom] Mock debate is locked, showing modal');
+            setDebate(mockFallback);
+            setShowLockModal(true);
+            setLoading(false);
+            return;
+          }
+
+          // If mock but not locked (unlikely in Phase 1), use it
+          setDebate(mockFallback);
+          setLoading(false);
+          return;
+        }
+
+        // Only call backend if not a known mock
         const data = await debateAPI.get(debateId);
+
+        // Soft-lock check (Phase 1)
+        // Check global default lock for backend data
+        const isLocked = data.isLocked !== false;
+
+        if (isLocked) {
+          console.log('[DebateRoom] Debate is locked (verified via mock), showing modal');
+          // Merge mock data for better modal display (e.g. unlockPhase)
+          setDebate({ ...data, ...mockFallback, isLocked: true });
+          setShowLockModal(true);
+          setLoading(false);
+          return;
+        }
+
         console.log('[Debate] Fetched debate data:', {
           id: data.id,
           title: data.title,
@@ -370,9 +408,22 @@ export default function DebateRoomPage({ params }: { params: Promise<{ id: strin
         } catch (e) {
           console.warn('Failed to fetch participants, using empty list');
         }
-      } catch (error) {
-        console.error('Failed to fetch debate:', error);
-        showToast('Failed to load debate', 'error');
+      } catch (error: any) {
+        // Fallback checks for simulation/mocks
+        console.log('[DebateRoom] Fetch failed, checking fallback for ID:', debateId);
+        const mockFallback = getDebateById(debateId);
+        console.log('[DebateRoom] Fallback result:', mockFallback ? 'Found' : 'Not Found', mockFallback?.id);
+
+        // If we found a mock fallback, this 404 was expected - don't log as error
+        if (mockFallback && mockFallback.isLocked) {
+          console.log('[DebateRoom] Backend 404/Error caught, using locked mock data instead');
+          setDebate(mockFallback);
+          setShowLockModal(true);
+        } else {
+          // Real error (no fallback available)
+          console.error('Failed to fetch debate:', error);
+          showToast('Failed to load debate', 'error');
+        }
       } finally {
         isFetchingRef.current = false;
         setLoading(false);
@@ -2749,6 +2800,12 @@ export default function DebateRoomPage({ params }: { params: Promise<{ id: strin
       </AnimatePresence>
 
 
+      {/* Lock Explainer Modal */}
+      <LockExplainerModal
+        isOpen={showLockModal}
+        onClose={() => router.push('/debates')}
+        unlockPhase={2}
+      />
     </div>
   );
 }

@@ -18,10 +18,11 @@ interface PostCardProps {
   onQuote?: (postId: string) => void;
   source?: 'feed' | 'hashtag' | 'profile' | 'search';
   onSaveChange?: () => void;
+  onReact?: () => void;
   onDelete?: (postId: string) => void;
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'feed', onSaveChange, onDelete }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'feed', onSaveChange, onReact, onDelete }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { toggleReact, toggleSave, deletePost } = useStore();
@@ -228,8 +229,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
     };
   }, [post.id, postSource]);
 
-  const handleReaction = () => {
-    toggleReact(post.id);
+  const handleReaction = async () => {
+    await toggleReact(post.id);
+    if (onReact) {
+      onReact();
+    }
   };
 
   const handleSave = async () => {
@@ -241,15 +245,22 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
   };
 
   const handleDelete = () => {
+    console.log('DEBUG: Delete button clicked for post:', post.id);
     if (confirm('Delete this post? This action cannot be undone.')) {
+      console.log('DEBUG: User confirmed delete. Calling onDelete and deletePost');
       // Call parent callback first for instant UI update
       if (onDelete) {
         onDelete(post.id);
       }
       // Then delete from backend
-      deletePost(post.id);
+      deletePost(post.id)
+        .then(() => console.log('DEBUG: deletePost promise resolved'))
+        .catch(err => console.error('DEBUG: deletePost failed:', err));
+
       addToast('Post deleted', 'success');
       setShowMenu(false);
+    } else {
+      console.log('DEBUG: User cancelled delete');
     }
   };
 
@@ -569,7 +580,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Translate */}
+          {/* Translate feature disabled
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={handleTranslate}
@@ -593,6 +604,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
               {showTranslation ? 'Original' : 'Translate'}
             </span>
           </motion.button>
+          */}
 
           {/* Share */}
           <motion.button

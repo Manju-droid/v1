@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -22,9 +23,10 @@ type PostHandlers struct {
 	pointsService      *service.PointsService
 	modService         *service.ModerationService
 	translationService *service.TranslationService
+	hashtagRepo        repository.HashtagRepository
 }
 
-func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService, translationService *service.TranslationService) *PostHandlers {
+func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService, translationService *service.TranslationService, hashtagRepo repository.HashtagRepository) *PostHandlers {
 	return &PostHandlers{
 		repo:               repo,
 		userRepo:           userRepo,
@@ -33,6 +35,7 @@ func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRep
 		pointsService:      pointsService,
 		modService:         modService,
 		translationService: translationService,
+		hashtagRepo:        hashtagRepo,
 	}
 }
 
@@ -280,10 +283,12 @@ func (h *PostHandlers) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *PostHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	fmt.Printf("DEBUG: Delete post request received for ID: %s\n", id)
 
 	// Get post details before deletion to check ownership and type
 	post, err := h.repo.GetByID(id)
 	if err != nil {
+		fmt.Printf("DEBUG: Post not found for ID: %s, error: %v\n", id, err)
 		Error(w, http.StatusNotFound, "Post not found")
 		return
 	}
@@ -300,14 +305,22 @@ func (h *PostHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	// For this implementation, let's just use ActionDeletePost to be safe/simple
 
 	if err := h.repo.Delete(id); err != nil {
+		fmt.Printf("DEBUG: Failed to delete post ID: %s, error: %v\n", id, err)
 		Error(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Remove from hashtags if any
+	if err := h.hashtagRepo.RemovePostFromHashtag(id); err != nil {
+		fmt.Printf("DEBUG: Failed to remove post from hashtags: %v\n", err)
+		// Don't fail the request, just log it
 	}
 
 	// Deduct points after successful deletion
 	// We ignore errors here as the post is already deleted
 	_ = h.pointsService.UpdateUserPoints(post.AuthorID, action)
 
+	fmt.Printf("DEBUG: Successfully deleted post ID: %s\n", id)
 	NoContent(w)
 }
 

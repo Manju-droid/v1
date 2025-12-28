@@ -219,6 +219,7 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
           <Text style={styles.actionText}>Share</Text>
         </TouchableOpacity>
 
+        {/* Translation feature disabled per user request
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleTranslate}
@@ -229,6 +230,7 @@ export function PostCard({ post, onPress, showFullContent = false }: PostCardPro
             {isTranslating ? 'Loading...' : showTranslation ? 'Original' : 'Translate'}
           </Text>
         </TouchableOpacity>
+        */}
       </View>
     </TouchableOpacity>
   );

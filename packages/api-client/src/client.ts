@@ -56,7 +56,13 @@ export async function request<T>(
     const apiBaseUrl = getApiBaseUrl();
     const response = await fetch(`${apiBaseUrl}${endpoint}`, {
       ...options,
-      headers,
+      headers: {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+      cache: 'no-store',
       signal: controller.signal,
     });
 

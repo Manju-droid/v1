@@ -2,6 +2,7 @@ package memory
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,17 +10,19 @@ import (
 )
 
 type HashtagMemoryRepository struct {
-	hashtags     map[string]*models.Hashtag
-	hashtagPosts map[string][]*models.HashtagPost // hashtagID -> posts
-	postRepo     *PostMemoryRepository
-	mu           sync.RWMutex
+	hashtags         map[string]*models.Hashtag
+	hashtagPosts     map[string][]*models.HashtagPost // hashtagID -> posts
+	hashtagFollowers map[string]map[string]bool       // hashtagID -> userID -> true
+	postRepo         *PostMemoryRepository
+	mu               sync.RWMutex
 }
 
 func NewHashtagMemoryRepository(postRepo *PostMemoryRepository) *HashtagMemoryRepository {
 	return &HashtagMemoryRepository{
-		hashtags:     make(map[string]*models.Hashtag),
-		hashtagPosts: make(map[string][]*models.HashtagPost),
-		postRepo:     postRepo,
+		hashtags:         make(map[string]*models.Hashtag),
+		hashtagPosts:     make(map[string][]*models.HashtagPost),
+		hashtagFollowers: make(map[string]map[string]bool),
+		postRepo:         postRepo,
 	}
 }
 
@@ -139,6 +142,12 @@ func (r *HashtagMemoryRepository) GetHashtagStats(hashtagID string) (boosts, sho
 
 	if hashtagPostList, exists := r.hashtagPosts[hashtagID]; exists {
 		for _, hp := range hashtagPostList {
+			// Verify post still exists
+			_, err := r.postRepo.GetByID(hp.PostID)
+			if err != nil {
+				continue // Skip deleted posts
+			}
+
 			if hp.IsBoost {
 				boosts++
 			} else {
@@ -150,3 +159,74 @@ func (r *HashtagMemoryRepository) GetHashtagStats(hashtagID string) (boosts, sho
 	return boosts, shouts, nil
 }
 
+func (r *HashtagMemoryRepository) RemovePostFromHashtag(postID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	fmt.Printf("DEBUG: HashtagRepo.RemovePostFromHashtag called for PostID: %s\n", postID)
+
+	// Iterate through all hashtags and remove the post if found
+	for hashtagID, posts := range r.hashtagPosts {
+		newPosts := make([]*models.HashtagPost, 0, len(posts))
+		removed := false
+		for _, hp := range posts {
+			if hp.PostID != postID {
+				newPosts = append(newPosts, hp)
+			} else {
+				removed = true
+				fmt.Printf("DEBUG: Found post %s in hashtag %s. Removing.\n", postID, hashtagID)
+			}
+		}
+		// Update if count changed
+		if removed {
+			r.hashtagPosts[hashtagID] = newPosts
+			fmt.Printf("DEBUG: Updated hashtag %s post count. New count: %d\n", hashtagID, len(newPosts))
+		}
+	}
+
+	return nil
+}
+
+func (r *HashtagMemoryRepository) FollowHashtag(userID, hashtagID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.hashtags[hashtagID]; !exists {
+		return errors.New("hashtag not found")
+	}
+
+	if _, exists := r.hashtagFollowers[hashtagID]; !exists {
+		r.hashtagFollowers[hashtagID] = make(map[string]bool)
+	}
+
+	r.hashtagFollowers[hashtagID][userID] = true
+	// Update the count on the hashtag model itself
+	if h, ok := r.hashtags[hashtagID]; ok {
+		h.Followers = len(r.hashtagFollowers[hashtagID])
+	}
+	return nil
+}
+
+func (r *HashtagMemoryRepository) UnfollowHashtag(userID, hashtagID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if followers, exists := r.hashtagFollowers[hashtagID]; exists {
+		delete(followers, userID)
+		// Update the count on the hashtag model itself
+		if h, ok := r.hashtags[hashtagID]; ok {
+			h.Followers = len(followers)
+		}
+	}
+	return nil
+}
+
+func (r *HashtagMemoryRepository) IsFollowing(userID, hashtagID string) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if followers, exists := r.hashtagFollowers[hashtagID]; exists {
+		return followers[userID], nil
+	}
+	return false, nil
+}

@@ -38,14 +38,17 @@ export default function TrendingPage() {
           // Map API data to TrendingHashtag interface
           // Assuming API returns { slug, name, posts, boosts, shouts }
           // If not, we might need to adjust or mock the missing fields for now
-          const formattedHashtags: TrendingHashtag[] = data.map((h: any) => ({
-            slug: h.slug,
-            name: h.name,
-            posts: h.posts || 0,
-            boosts: h.boosts || 0,
-            shouts: h.shouts || 0,
-            momentum: (h.boosts || 0) - (h.shouts || 0),
-          }));
+          const formattedHashtags: TrendingHashtag[] = data.map((h: any) => {
+            const hashtagInfo = h.hashtag || h;
+            return {
+              slug: hashtagInfo.slug,
+              name: hashtagInfo.name,
+              posts: h.posts || ((h.boosts || 0) + (h.shouts || 0)),
+              boosts: h.boosts || 0,
+              shouts: h.shouts || 0,
+              momentum: (h.boosts || 0) - (h.shouts || 0),
+            };
+          });
           setHashtags(formattedHashtags);
         }
       } catch (error) {

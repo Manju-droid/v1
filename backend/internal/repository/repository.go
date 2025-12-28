@@ -80,6 +80,10 @@ type HashtagRepository interface {
 	AddPostToHashtag(hashtagID, postID string, isBoost bool) error
 	GetPostsByHashtag(hashtagID string) ([]*models.Post, error)
 	GetHashtagStats(hashtagID string) (boosts, shouts int, err error)
+	RemovePostFromHashtag(postID string) error
+	FollowHashtag(userID, hashtagID string) error
+	UnfollowHashtag(userID, hashtagID string) error
+	IsFollowing(userID, hashtagID string) (bool, error)
 }
 
 // DebateRepository defines the interface for debate data access

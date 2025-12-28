@@ -8,6 +8,7 @@ import { Debate, getTimeRemaining, getStartTime } from '@/lib/mock-debates';
 import { useToast } from '@/hooks/useToast';
 import { useNotificationStore } from '@/lib/notification-store';
 import { useDebateRoomStore, JoinDebateModal } from '@/features/debates';
+import { LockExplainerModal } from './LockExplainerModal';
 import { currentUserMock, useStore } from '@/lib/store';
 import { userAPI } from '@v/api-client';
 
@@ -27,6 +28,7 @@ export const DebateCard: React.FC<DebateCardProps> = ({ debate, index, onRegiste
   const { joinRoom } = useDebateRoomStore();
   const { currentUser } = useStore(); // Get current user from store
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
   const [hostInfo, setHostInfo] = useState<{ displayName?: string; handle?: string; avatar?: string } | null>(null);
 
   // Fetch host info if not available in debate object
@@ -81,11 +83,20 @@ export const DebateCard: React.FC<DebateCardProps> = ({ debate, index, onRegiste
 
   const isHost = currentUser?.id && (debate.host?.id === currentUser.id || debate.hostId === currentUser.id); // Check if current user is host
 
+  // Phase 1 Global Lock: Treat undefined isLocked as TRUE
+  const isLocked = debate.isLocked !== false;
+
   const handleJoin = () => {
     if (!isRunning) {
       showToast('This debate hasn\'t started yet', 'info');
       return;
     }
+
+    if (isLocked) {
+      setShowLockModal(true);
+      return;
+    }
+
     // Open the side selection modal
     setShowJoinModal(true);
   };
@@ -114,12 +125,27 @@ export const DebateCard: React.FC<DebateCardProps> = ({ debate, index, onRegiste
       transition={{ duration: 0.3, delay: index * 0.05 }}
       className="bg-[#1F2937] border border-white/[0.08] rounded-xl p-4 sm:p-5 hover:border-cyan-500/40 transition-all duration-300 group h-full flex flex-col relative" // Added relative
       onClick={() => {
+        if (isLocked) {
+          setShowLockModal(true);
+          return;
+        }
         // If scheduled, go to waiting screen
         if (!isRunning) {
           router.push(`/debates/${debate.id}`);
         }
       }}
     >
+      {/* Lock Overlay/Badge */}
+      {isLocked && (
+        <div className="absolute top-2 right-2 z-10">
+          <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md border border-white/10 px-2 py-1 rounded-full">
+            <svg className="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wide">Coming Soon</span>
+          </div>
+        </div>
+      )}
       {/* Delete Button for Host */}
       {isHost && !isRunning && (
         <button
@@ -249,7 +275,22 @@ export const DebateCard: React.FC<DebateCardProps> = ({ debate, index, onRegiste
       <div className="flex-grow"></div>
 
       {/* Action button */}
-      {isRunning ? (
+      {isLocked ? (
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowLockModal(true);
+          }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full py-2 sm:py-2.5 rounded-lg font-medium text-sm transition-all duration-200 bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Unlock Preview
+        </motion.button>
+      ) : isRunning ? (
         <motion.button
           onClick={handleJoin}
           whileHover={{ scale: 1.02 }}
@@ -291,6 +332,13 @@ export const DebateCard: React.FC<DebateCardProps> = ({ debate, index, onRegiste
         onClose={() => setShowJoinModal(false)}
         onSelectSide={handleSelectSide}
         debateTitle={debate.title}
+      />
+
+      {/* Lock Explainer Modal */}
+      <LockExplainerModal
+        isOpen={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        unlockPhase={debate.unlockPhase}
       />
     </motion.div>
   );

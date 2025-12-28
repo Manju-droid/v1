@@ -26,6 +26,9 @@ export interface Debate {
   disagreeCount: number;
   createdAt: Date | string;
   updatedAt: Date | string;
+  isLocked: boolean;
+  unlockPhase: number;
+  earlyAccessRoles?: string[];
   // Frontend-only fields (populated from backend)
   host?: {
     id: string;

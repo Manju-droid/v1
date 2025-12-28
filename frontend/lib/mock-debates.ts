@@ -21,6 +21,9 @@ export interface MockDebate {
   category: string;
   totalParticipants?: number;
   isAI?: boolean;
+  isLocked?: boolean;
+  unlockPhase?: number;
+  earlyAccessRoles?: string[];
 }
 
 export const mockDebates: MockDebate[] = [
@@ -42,6 +45,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Technology',
     totalParticipants: 112,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb2',
@@ -61,6 +66,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Lifestyle',
     totalParticipants: 221,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb3',
@@ -80,6 +87,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Society',
     totalParticipants: 423,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb4',
@@ -99,6 +108,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Environment',
     totalParticipants: 123,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb5',
@@ -118,6 +129,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Politics',
     totalParticipants: 357,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb6',
@@ -137,6 +150,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Finance',
     totalParticipants: 223,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb7',
@@ -156,6 +171,8 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Environment',
     totalParticipants: 365,
+    isLocked: true,
+    unlockPhase: 2,
   },
   {
     id: 'deb8',
@@ -175,6 +192,30 @@ export const mockDebates: MockDebate[] = [
     },
     category: 'Education',
     totalParticipants: 323,
+    isLocked: true,
+    unlockPhase: 2,
+  },
+  {
+    id: 'deb9',
+    title: 'The Future of Neural Interfaces',
+    description: 'A deep dive into Brain-Computer Interfaces and their ethical implications. Join early access to discuss.',
+    startTime: new Date(Date.now() + 86400000).toISOString(), // 24 hours from now
+    endTime: new Date(Date.now() + 90000000).toISOString(),
+    status: 'upcoming',
+    agreeSide: 12,
+    disagreeSide: 8,
+    host: {
+      id: 'host9',
+      displayName: 'Future Tech',
+      handle: 'future_tech',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=FutureTech&backgroundColor=b6e3f4',
+      isPlatinum: true,
+    },
+    category: 'Technology',
+    totalParticipants: 20,
+    isLocked: true,
+    unlockPhase: 2,
+    earlyAccessRoles: ['VIP'],
   },
 ];
 
