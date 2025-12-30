@@ -14,9 +14,11 @@ type User struct {
 	Name                  string   `json:"name"`
 	Handle                string   `json:"handle"`
 	Email                 string   `json:"email"`
+	Password              string   `json:"-"` // Internal use only, never exposed via JSON
 	PhoneNumber           string   `json:"phoneNumber"`
 	Languages             []string `json:"languages"`
 	Bio                   string   `json:"bio"`
+	Gender                string   `json:"gender,omitempty"`
 	AvatarURL             string   `json:"avatarUrl"`
 	CoverPhotoURL         string   `json:"coverPhotoUrl"`
 	FollowersOnlyComments bool     `json:"followersOnlyComments"`

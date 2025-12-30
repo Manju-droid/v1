@@ -58,7 +58,7 @@ export default function HashtagDetailPage({ params }: { params: Promise<{ slug: 
           const hashtagData = await hashtagAPI.getBySlug(slug);
           if (hashtagData) {
             // Backend returns { hashtag: {...}, boosts, shouts, momentum }
-            const h = hashtagData.hashtag || hashtagData;
+            const h = (hashtagData as any).hashtag || hashtagData;
             const name = h.name || slug.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
 
             setHashtag({

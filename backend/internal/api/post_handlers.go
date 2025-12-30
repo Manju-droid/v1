@@ -205,9 +205,16 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 		}
 
 		enrichedPosts = append(enrichedPosts, map[string]interface{}{
-			"id":                post.ID,
-			"authorId":          post.AuthorID,
-			"author":            author,
+			"id":       post.ID,
+			"authorId": post.AuthorID,
+			"author": map[string]interface{}{
+				"id":          author.ID,
+				"name":        author.Name,
+				"displayName": author.Name, // Map Name to displayName for frontend
+				"handle":      author.Handle,
+				"avatar":      author.AvatarURL,
+				"avatarUrl":   author.AvatarURL,
+			},
 			"content":           post.Content,
 			"mediaType":         post.MediaType,
 			"mediaUrl":          post.MediaURL,
@@ -439,9 +446,11 @@ func (h *PostHandlers) React(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.AddReaction(reaction); err != nil {
+		fmt.Printf("DEBUG: Failed to add reaction for post %s user %s: %v\n", postID, req.UserID, err)
 		Error(w, http.StatusConflict, "Already reacted")
 		return
 	}
+	fmt.Printf("DEBUG: Successfully added reaction for post %s user %s\n", postID, req.UserID)
 
 	// Create notification for post author (if not reacting to own post)
 	post, err := h.repo.GetByID(postID)

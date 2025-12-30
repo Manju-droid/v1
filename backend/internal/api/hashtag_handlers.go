@@ -170,6 +170,7 @@ func (h *HashtagHandlers) List(w http.ResponseWriter, r *http.Request) {
 			"hashtag":     hashtag,
 			"boosts":      boosts,
 			"shouts":      shouts,
+			"posts":       boosts + shouts,
 			"momentum":    boosts - shouts,
 			"isFollowing": isFollowing,
 			"followers":   hashtag.Followers,
@@ -274,23 +275,33 @@ func (h *HashtagHandlers) GetPosts(w http.ResponseWriter, r *http.Request) {
 		}
 
 		enrichedPosts = append(enrichedPosts, map[string]interface{}{
-			"id":           post.ID,
-			"content":      post.Content,
-			"author":       author,
-			"timestamp":    post.CreatedAt,
-			"reactions":    post.ReactionCount,
-			"comments":     post.CommentCount,
-			"commentCount": post.CommentCount,
-			"saves":        post.SaveCount,
-			"saveCount":    post.SaveCount,
-			"isLiked":      isLiked,
-			"isSaved":      isSaved,
-			"hasReacted":   isLiked, // Some frontends use this
-			"mediaType":    post.MediaType,
-			"mediaUrl":     post.MediaURL,
-			"createdAt":    post.CreatedAt,
-			"updatedAt":    post.UpdatedAt,
+			"id":      post.ID,
+			"content": post.Content,
+			"author": map[string]interface{}{
+				"id":          author.ID,
+				"name":        author.Name,
+				"displayName": author.Name, // Map Name to displayName for ProfileCard
+				"handle":      author.Handle,
+				"avatar":      author.AvatarURL, // Frontend often expects 'avatar' not 'avatarUrl'
+				"avatarUrl":   author.AvatarURL,
+			},
+			"timestamp":     post.CreatedAt,
+			"reactionCount": post.ReactionCount,
+			"reactions":     post.ReactionCount, // Backward compatibility
+			"commentCount":  post.CommentCount,
+			"comments":      post.CommentCount, // Backward compatibility
+			"saveCount":     post.SaveCount,
+			"saves":         post.SaveCount, // Backward compatibility
+			"isLiked":       isLiked,
+			"isSaved":       isSaved,
+			"reacted":       isLiked,
+			"saved":         isSaved,
+			"mediaType":     post.MediaType,
+			"mediaUrl":      post.MediaURL,
+			"createdAt":     post.CreatedAt,
+			"updatedAt":     post.UpdatedAt,
 		})
+		log.Printf("DEBUG: Serving post %s with reactionCount: %d", post.ID, post.ReactionCount)
 	}
 
 	JSON(w, http.StatusOK, enrichedPosts)

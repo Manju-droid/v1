@@ -58,7 +58,7 @@ interface AppState {
   addPost: (content: string, media?: { type: 'image' | 'video'; url: string }, options?: { commentsDisabled?: boolean; commentLimit?: number }) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
   toggleReact: (postId: string) => Promise<void>;
-  toggleSave: (postId: string) => Promise<void>;
+  toggleSave: (postId: string, fallbackState?: { saved: boolean }) => Promise<void>;
   toggleComments: (postId: string) => void;
   setCommentLimit: (postId: string, limit: number | undefined) => void;
 
@@ -89,7 +89,32 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await syncCurrentUser();
       const user = getCurrentUser();
-      set({ currentUser: user });
+
+      set(state => {
+        // Update current user
+        const newState: Partial<AppState> = { currentUser: user };
+
+        // Also update author info in existing posts if user matches
+        if (user) {
+          newState.posts = state.posts.map(post => {
+            if (post.author.id === user.id) {
+              return {
+                ...post,
+                author: {
+                  ...post.author,
+                  displayName: user.displayName,
+                  handle: user.handle,
+                  avatar: user.avatar,
+                }
+              };
+            }
+            return post;
+          });
+        }
+
+        return newState;
+      });
+
       // Update the mock object for legacy code that imports it directly
       currentUserMock = user;
     } catch (error) {
@@ -392,30 +417,33 @@ export const useStore = create<AppState>((set, get) => ({
   toggleReact: async (postId: string) => {
     const state = get();
     const post = state.posts.find(p => p.id === postId);
-    if (!post) return;
 
-    const wasReacted = post.reacted;
-    const optimisticCount = wasReacted ? post.reactionCount - 1 : post.reactionCount + 1;
-
-    // Optimistic update
-    set(state => ({
-      posts: state.posts.map(p => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            reacted: !wasReacted,
-            reactionCount: optimisticCount,
-          };
-        }
-        return p;
-      }),
-    }));
-
-    // Sync with backend
+    // Check if user is authenticated
     if (!currentUserMock?.id) {
       console.warn('Cannot react: user not authenticated');
       return;
     }
+
+    const wasReacted = post?.reacted || false;
+    const optimisticCount = wasReacted ? (post ? post.reactionCount - 1 : 0) : (post ? post.reactionCount + 1 : 1);
+
+    // Optimistic update (only if post is in store)
+    if (post) {
+      set(state => ({
+        posts: state.posts.map(p => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              reacted: !wasReacted,
+              reactionCount: optimisticCount,
+            };
+          }
+          return p;
+        }),
+      }));
+    }
+
+    // Sync with backend
     try {
       if (wasReacted) {
         await postAPI.unreact(postId, currentUserMock.id);
@@ -437,32 +465,38 @@ export const useStore = create<AppState>((set, get) => ({
           if (isAlreadyReacted) {
             // Already reacted, complete toggle by unreacting
             await postAPI.unreact(postId, currentUserMock.id);
-            set(state => ({
-              posts: state.posts.map(p =>
-                p.id === postId
-                  ? { ...p, reacted: false, reactionCount: Math.max(0, p.reactionCount - 1) }
-                  : p
-              ),
-            }));
+            if (post) {
+              set(state => ({
+                posts: state.posts.map(p =>
+                  p.id === postId
+                    ? { ...p, reacted: false, reactionCount: Math.max(0, p.reactionCount - 1) }
+                    : p
+                ),
+              }));
+            }
           } else {
             // Not reacted, complete toggle by reacting
             await postAPI.react(postId, currentUserMock.id);
-            set(state => ({
-              posts: state.posts.map(p =>
-                p.id === postId
-                  ? { ...p, reacted: true, reactionCount: p.reactionCount + 1 }
-                  : p
-              ),
-            }));
+            if (post) {
+              set(state => ({
+                posts: state.posts.map(p =>
+                  p.id === postId
+                    ? { ...p, reacted: true, reactionCount: p.reactionCount + 1 }
+                    : p
+                ),
+              }));
+            }
           }
           return;
         } catch (retryError: any) {
           console.error('Failed to complete toggle:', retryError);
-          set(state => ({
-            posts: state.posts.map(p =>
-              p.id === postId ? { ...p, reacted: isAlreadyReacted } : p
-            ),
-          }));
+          if (post) {
+            set(state => ({
+              posts: state.posts.map(p =>
+                p.id === postId ? { ...p, reacted: isAlreadyReacted } : p
+              ),
+            }));
+          }
           return;
         }
       }
@@ -478,43 +512,56 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       // Revert the optimistic update on other errors
-      set(state => ({
-        posts: state.posts.map(p => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              reacted: wasReacted,
-              reactionCount: wasReacted ? optimisticCount + 1 : optimisticCount - 1,
-            };
-          }
-          return p;
-        }),
-      }));
+      if (post) {
+        set(state => ({
+          posts: state.posts.map(p => {
+            if (p.id === postId) {
+              return {
+                ...p,
+                reacted: wasReacted,
+                reactionCount: wasReacted ? optimisticCount + 1 : optimisticCount - 1,
+              };
+            }
+            return p;
+          }),
+        }));
+      }
     }
   },
 
   // Toggle save on a post
-  toggleSave: async (postId: string) => {
+  toggleSave: async (postId: string, fallbackState?: { saved: boolean }) => {
     const state = get();
     const post = state.posts.find((p) => p.id === postId);
-    if (!post) return;
 
-    const newSavedState = !post.saved;
-    const optimisticSaveCount = newSavedState ? post.saveCount + 1 : post.saveCount - 1;
+    // Determine current state: use store post if available, otherwise fallback
+    const currentSavedState = post ? post.saved : fallbackState?.saved;
+    const currentSaveCount = post ? post.saveCount : 0; // Only used for optimistic update updates
 
-    // Optimistic update
-    set((state) => ({
-      ...state,
-      posts: state.posts.map((p) =>
-        p.id === postId
-          ? {
-            ...p,
-            saved: newSavedState,
-            saveCount: optimisticSaveCount,
-          }
-          : p
-      ),
-    }));
+    // If we don't know the state, we can't toggle
+    if (currentSavedState === undefined) {
+      console.warn(`Cannot toggle save for post ${postId}: post not in store and no fallback state provided`);
+      return;
+    }
+
+    const newSavedState = !currentSavedState;
+    const optimisticSaveCount = newSavedState ? currentSaveCount + 1 : Math.max(0, currentSaveCount - 1);
+
+    // Optimistic update (only if in store)
+    if (post) {
+      set((state) => ({
+        ...state,
+        posts: state.posts.map((p) =>
+          p.id === postId
+            ? {
+              ...p,
+              saved: newSavedState,
+              saveCount: optimisticSaveCount,
+            }
+            : p
+        ),
+      }));
+    }
 
     // Sync with backend
     if (!currentUserMock?.id) {
@@ -540,43 +587,57 @@ export const useStore = create<AppState>((set, get) => ({
           if (isAlreadySaved) {
             // Already saved, complete toggle by unsaving
             await postAPI.unsave(postId, currentUserMock.id);
-            set((state) => ({
-              posts: state.posts.map((p) =>
-                p.id === postId
-                  ? { ...p, saved: false, saveCount: Math.max(0, p.saveCount - 1) }
-                  : p
-              ),
-            }));
+            // Update store if post exists
+            const currentPost = get().posts.find(p => p.id === postId);
+            if (currentPost) {
+              set((state) => ({
+                posts: state.posts.map((p) =>
+                  p.id === postId
+                    ? { ...p, saved: false, saveCount: Math.max(0, p.saveCount - 1) }
+                    : p
+                ),
+              }));
+            }
           } else {
             // Not saved, complete toggle by saving
             await postAPI.save(postId, currentUserMock.id);
-            set((state) => ({
-              posts: state.posts.map((p) =>
-                p.id === postId
-                  ? { ...p, saved: true, saveCount: p.saveCount + 1 }
-                  : p
-              ),
-            }));
+            const currentPost = get().posts.find(p => p.id === postId);
+            if (currentPost) {
+              set((state) => ({
+                posts: state.posts.map((p) =>
+                  p.id === postId
+                    ? { ...p, saved: true, saveCount: p.saveCount + 1 }
+                    : p
+                ),
+              }));
+            }
           }
           return;
         } catch (retryError: any) {
           console.error('Failed to complete save toggle:', retryError);
-          set((state) => ({
-            posts: state.posts.map((p) =>
-              p.id === postId ? { ...p, saved: isAlreadySaved } : p
-            ),
-          }));
+          // Only revert store if post exists
+          const currentPost = get().posts.find(p => p.id === postId);
+          if (currentPost) {
+            set((state) => ({
+              posts: state.posts.map((p) =>
+                p.id === postId ? { ...p, saved: isAlreadySaved } : p
+              ),
+            }));
+          }
           return;
         }
       }
 
       console.error('Failed to sync save with backend:', error);
-      // Revert on error
-      set((state) => ({
-        posts: state.posts.map((p) =>
-          p.id === postId ? { ...p, saved: !newSavedState, saveCount: post.saveCount } : p
-        ),
-      }));
+      // Revert on error (only if post in store)
+      const currentPost = get().posts.find(p => p.id === postId);
+      if (currentPost) {
+        set((state) => ({
+          posts: state.posts.map((p) =>
+            p.id === postId ? { ...p, saved: !newSavedState, saveCount: currentSaveCount } : p
+          ),
+        }));
+      }
     }
   },
 

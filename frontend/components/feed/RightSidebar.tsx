@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { hashtagAPI, userAPI } from '@v/api-client';
+import { getAvatarUrl } from '@/lib/avatar';
 
 export const RightSidebar: React.FC = () => {
   const router = useRouter();
@@ -25,10 +26,18 @@ export const RightSidebar: React.FC = () => {
         ]);
 
         if (Array.isArray(hashtagsData)) {
-          // Sort by post count and take top 5
+          // Flatten and sort by post count
           const sortedHashtags = hashtagsData
+            .map((item: any) => ({
+              ...item.hashtag,
+              posts: item.posts,
+              followers: item.followers,
+              trending: item.trending,
+              boosts: item.boosts,
+              shouts: item.shouts
+            }))
             .sort((a: any, b: any) => (b.posts || 0) - (a.posts || 0))
-            .slice(0, 5);
+            .slice(0, 1);
           setTrendingHashtags(sortedHashtags);
         }
 
@@ -99,8 +108,8 @@ export const RightSidebar: React.FC = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-gray-400">
-                      <span>{formatCount(hashtag.posts || 0)} posts</span>
-                      <span>{formatCount(hashtag.followers || 0)} followers</span>
+                      <span>{formatCount(hashtag.boosts || 0)} boosts</span>
+                      <span>{formatCount(hashtag.shouts || 0)} shouts</span>
                     </div>
                   </div>
                 </motion.div>
@@ -137,7 +146,7 @@ export const RightSidebar: React.FC = () => {
                     className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-cyan-500/20 hover:ring-cyan-500/40 transition-all cursor-pointer"
                   >
                     <Image
-                      src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`}
+                      src={getAvatarUrl(user)}
                       alt={user.name}
                       fill
                       className="object-cover"

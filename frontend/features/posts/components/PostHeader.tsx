@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { MockUser } from '@/lib/mock';
+import { PostMenu } from './PostMenu';
 
 interface PostHeaderProps {
   author: MockUser;
   showBackButton?: boolean;
+  postId: string;
 }
 
-export const PostHeader: React.FC<PostHeaderProps> = ({ author, showBackButton = true }) => {
+export const PostHeader: React.FC<PostHeaderProps> = ({ author, showBackButton = true, postId }) => {
   const router = useRouter();
 
   const handleBack = () => {
@@ -55,16 +57,7 @@ export const PostHeader: React.FC<PostHeaderProps> = ({ author, showBackButton =
         </div>
       </div>
 
-      <button
-        className="w-9 h-9 flex-shrink-0 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800/50 rounded-full transition-colors"
-        aria-label="More options"
-      >
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <circle cx="10" cy="4" r="1.5" />
-          <circle cx="10" cy="10" r="1.5" />
-          <circle cx="10" cy="16" r="1.5" />
-        </svg>
-      </button>
+      <PostMenu postId={postId} authorId={author.id} />
     </div>
   );
 };

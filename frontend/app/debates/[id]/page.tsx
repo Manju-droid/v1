@@ -279,7 +279,7 @@ export default function DebateRoomPage({ params }: { params: Promise<{ id: strin
         if (isLocked) {
           console.log('[DebateRoom] Debate is locked (verified via mock), showing modal');
           // Merge mock data for better modal display (e.g. unlockPhase)
-          setDebate({ ...data, ...mockFallback, isLocked: true });
+          setDebate({ ...data, isLocked: true });
           setShowLockModal(true);
           setLoading(false);
           return;

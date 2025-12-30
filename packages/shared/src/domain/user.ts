@@ -15,6 +15,7 @@ export interface User {
   phoneNumber?: string;
   languages?: string[];
   bio?: string;
+  gender?: string;
   avatar?: string;
   avatarUrl?: string;
   coverPhotoUrl?: string;
@@ -57,11 +58,13 @@ export interface CreateUserRequest {
   handle: string;
   email: string;
   bio?: string;
+  gender?: string;
 }
 
 export interface UpdateUserRequest {
   name?: string;
   bio?: string;
+  gender?: string;
   avatarUrl?: string;
   coverPhotoUrl?: string;
   followersOnlyComments?: boolean;

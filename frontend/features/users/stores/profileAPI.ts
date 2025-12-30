@@ -8,11 +8,13 @@ export interface UserProfile {
   name: string;
   handle: string;
   bio: string;
+  gender?: string;
   avatarUrl: string;
   coverPhotoUrl?: string;
   followersOnlyComments?: boolean;
   isFollowing: boolean;
   isFollower: boolean;
+  email?: string;
   counts: {
     posts: number;
     followers: number;
@@ -51,7 +53,9 @@ export const getUser = async (handle: string): Promise<UserProfile | null> => {
       id: user.id,
       name: user.name,
       handle: user.handle,
+      email: user.email,
       bio: user.bio ?? '',
+      gender: (user as any).gender,
       avatarUrl: user.avatarUrl ?? '',
       coverPhotoUrl: user.coverPhotoUrl,
       followersOnlyComments: user.followersOnlyComments || false,
@@ -315,10 +319,14 @@ export const removeCoverPhoto = async (): Promise<void> => {
 };
 
 // Update user profile settings
-export const updateUserProfile = async (updates: { name?: string; handle?: string; bio?: string; followersOnlyComments?: boolean }): Promise<void> => {
+export const updateUserProfile = async (updates: { name?: string; handle?: string; email?: string; password?: string; bio?: string; gender?: string; avatarUrl?: string; followersOnlyComments?: boolean }, userId?: string): Promise<void> => {
   try {
-    if (!currentUserMock?.id) throw new Error('User not authenticated');
-    await userAPI.update(currentUserMock.id, updates);
+    const user = getCurrentUser();
+    const idToUse = userId || user?.id;
+
+    if (!idToUse) throw new Error('User not authenticated');
+
+    await userAPI.update(idToUse, updates);
 
     // Sync current user to update throughout app
     await syncCurrentUser();

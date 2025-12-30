@@ -115,6 +115,7 @@ export default function SignUpPage() {
     handle: '',
     phoneNumber: '',
     language: '',
+    gender: '',
     password: '',
     confirmPassword: '',
   });
@@ -155,8 +156,9 @@ export default function SignUpPage() {
         password: formData.password,
         phoneNumber: formData.phoneNumber,
         language: formData.language,
+        gender: formData.gender,
         bio: '',
-      });
+      } as any);
 
       // Token is automatically set by authAPI.signup()
       useStore.getState().setCurrentUser(response.user);
@@ -303,6 +305,23 @@ export default function SignUpPage() {
                     {LANGUAGES.map(lang => (
                       <option key={lang} value={lang}>{lang}</option>
                     ))}
+                  </select>
+                </div>
+
+                {/* Gender */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Gender</label>
+                  <select
+                    name="gender"
+                    required
+                    value={formData.gender}
+                    onChange={handleChange}
+                    className="w-full bg-[#0D1117] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/50 transition-all appearance-none"
+                  >
+                    <option value="" disabled>Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Non-binary / Other</option>
                   </select>
                 </div>
 

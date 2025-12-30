@@ -250,7 +250,7 @@ function PostDetailContent() {
             {/* <QuoteModal post={post} onClose={() => {}} /> */}
 
             {/* Post Header */}
-            <PostHeader author={post.author} showBackButton={true} />
+            <PostHeader author={post.author} showBackButton={true} postId={post.id} />
 
             {/* Context for focused comment */}
             {focusedComment && (

@@ -181,6 +181,11 @@ export function getUserByHandle(handle: string): MockUser | undefined {
 // Utility functions
 export function formatTimestamp(timestamp: string): string {
   const date = new Date(timestamp);
+  // Check for invalid date
+  if (isNaN(date.getTime())) {
+    return 'Just now'; // Fallback for invalid dates
+  }
+
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -197,7 +202,11 @@ export function formatTimestamp(timestamp: string): string {
   }
 }
 
-export function formatCount(count: number): string {
+export function formatCount(count: number | undefined | null): string {
+  if (count === undefined || count === null || isNaN(count)) {
+    return '0';
+  }
+
   if (count < 1000) {
     return count.toString();
   } else if (count < 1000000) {

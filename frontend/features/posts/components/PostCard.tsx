@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/Toast';
 import { renderTextWithHashtags } from '@/lib/text-utils';
 import { trackReachImpression, isDocumentVisible } from '@/lib/analytics';
 import { ReportButton } from './ReportButton';
+import { getAvatarUrl } from '@/lib/avatar';
 
 interface PostCardProps {
   post: Post;
@@ -237,7 +238,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
   };
 
   const handleSave = async () => {
-    await toggleSave(post.id);
+    await toggleSave(post.id, { saved: post.saved });
     // Notify parent component if callback provided
     if (onSaveChange) {
       onSaveChange();

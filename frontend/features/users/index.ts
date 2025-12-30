@@ -9,6 +9,7 @@ export { AvatarUpload } from './components/AvatarUpload';
 export { CoverPhotoUpload } from './components/CoverPhotoUpload';
 export { FollowersModal } from './components/FollowersModal';
 export { FollowingModal } from './components/FollowingModal';
+export { EditProfileModal } from './components/EditProfileModal';
 
 // Stores
 export { useUserStore, type UserTier, type UserPoints } from './stores/user-store';

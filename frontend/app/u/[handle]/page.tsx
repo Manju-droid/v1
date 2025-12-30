@@ -12,11 +12,12 @@ import { PostCard } from '@/features/posts';
 import { useStore } from '@/lib/store';
 import type { Post } from '@/lib/store';
 import { formatCount, MockUser } from '@/lib/mock';
-import { FollowersModal, FollowingModal, AvatarUpload, CoverPhotoUpload, getUser, follow, unfollow, getUserPosts, updateUserProfile } from '@/features/users';
+import { FollowersModal, FollowingModal, EditProfileModal, AvatarUpload, CoverPhotoUpload, getUser, follow, unfollow, getUserPosts, updateUserProfile } from '@/features/users';
 import { messageAPI, postAPI, userAPI } from '@v/api-client';
 import { PointsDisplay } from '@/components/ui/PointsDisplay';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { getCurrentUser, syncCurrentUser } from '@/lib/currentUser';
+import { getAvatarUrl } from '@/lib/avatar';
 
 type TabType = 'posts' | 'replies' | 'saved';
 
@@ -36,7 +37,9 @@ interface UserProfile {
   id: string;
   name: string;
   handle: string;
+  email?: string;
   bio: string;
+  gender?: string;
   avatarUrl: string;
   coverPhotoUrl?: string;
   followersOnlyComments?: boolean;
@@ -55,14 +58,14 @@ export default function ProfilePage() {
   const handle = params?.handle as string;
   const router = useRouter();
 
-  // Use Zustand store for posts (like feed page does)
-  const { posts: storePosts, initializeFromMock } = useStore();
+  // Use Zustand store
+  const { posts: storePosts, initializeFromMock, currentUser, syncCurrentUser } = useStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
   const [localIsFollowing, setLocalIsFollowing] = useState(false);
   const [localFollowersCount, setLocalFollowersCount] = useState(0);
-  const [showEditMenu, setShowEditMenu] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showCoverEditMenu, setShowCoverEditMenu] = useState(false);
   const [showFollowersModal, setShowFollowersModal] = useState(false);
   const [showFollowingModal, setShowFollowingModal] = useState(false);
@@ -71,12 +74,14 @@ export default function ProfilePage() {
   const [isSticky, setIsSticky] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
-  const currentUser = getCurrentUser();
+  // const currentUser = getCurrentUser(); // Removed non-reactive call
 
+  // Initialize store posts on mount
   // Initialize store posts on mount
   useEffect(() => {
     initializeFromMock();
-  }, [initializeFromMock]);
+    syncCurrentUser();
+  }, [initializeFromMock, syncCurrentUser]);
 
   // Check both ID and handle to ensure accurate detection even after page refresh
   const isOwnProfile = useMemo(() => {
@@ -193,6 +198,7 @@ export default function ProfilePage() {
           id: profileData.id,
           name: profileData.name || '',
           handle: profileData.handle || handle,
+          email: profileData.email,
           bio: profileData.bio || '',
           avatarUrl: profileData.avatarUrl || '',
           coverPhotoUrl: profileData.coverPhotoUrl,
@@ -244,15 +250,17 @@ export default function ProfilePage() {
   };
 
   // Function to handle post deletion (instant update)
+  // Function to handle post deletion (instant update)
   const handlePostDelete = async (postId: string) => {
     // The store's deletePost function will handle removing the post
 
-    // Refresh user points after deletion
+    // Refresh user points and profile counts after deletion
     if (isOwnProfile && currentUser?.id) {
       try {
         // Wait for backend to process delete and update points
         await new Promise(resolve => setTimeout(resolve, 300));
 
+        // Refresh points
         const updatedUser = await userAPI.getById(currentUser.id);
         if (updatedUser) {
           setUserPoints({
@@ -265,8 +273,18 @@ export default function ProfilePage() {
             debatesHostedToday: updatedUser.debatesHostedToday || 0,
           });
         }
+
+        // Refresh profile counts (including Total Reach)
+        const updatedProfile = await getUser(handle);
+        if (updatedProfile) {
+          setProfile(prev => prev ? {
+            ...prev,
+            counts: updatedProfile.counts,
+          } : null);
+        }
+
       } catch (error) {
-        console.error('Failed to refresh user points:', error);
+        console.error('Failed to refresh data after delete:', error);
       }
     }
   };
@@ -483,17 +501,7 @@ export default function ProfilePage() {
     }, 100);
   };
 
-  const handleFollowersOnlyCommentsToggle = async () => {
-    if (!profile || !isOwnProfile) return;
 
-    const newValue = !profile.followersOnlyComments;
-    try {
-      await updateUserProfile({ followersOnlyComments: newValue });
-      setProfile(prev => prev ? { ...prev, followersOnlyComments: newValue } : null);
-    } catch (error) {
-      console.error('Failed to update followers only comments setting:', error);
-    }
-  };
 
   if (loading) {
     return (
@@ -621,39 +629,11 @@ export default function ProfilePage() {
                 {isOwnProfile ? (
                   <div className="relative">
                     <button
-                      onClick={() => setShowEditMenu(!showEditMenu)}
+                      onClick={() => setShowEditProfileModal(true)}
                       className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                     >
                       Edit Profile
                     </button>
-                    {showEditMenu && (
-                      <div className="absolute top-full left-0 mt-2 bg-gray-800 border border-white/[0.06] rounded-lg shadow-lg z-10 min-w-[250px]">
-                        <div className="p-2">
-                          <AvatarUpload
-                            currentAvatar={profile.avatarUrl}
-                            onAvatarChange={handleAvatarChange}
-                          />
-                        </div>
-                        <div className="border-t border-white/[0.06] p-3">
-                          <label className="flex items-center justify-between cursor-pointer">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-white mb-1">Followers Only Comments</p>
-                              <p className="text-xs text-gray-400">Only your followers can comment on your posts</p>
-                            </div>
-                            <button
-                              onClick={handleFollowersOnlyCommentsToggle}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${profile.followersOnlyComments ? 'bg-cyan-500' : 'bg-gray-600'
-                                }`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profile.followersOnlyComments ? 'translate-x-6' : 'translate-x-1'
-                                  }`}
-                              />
-                            </button>
-                          </label>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ) : currentUser ? (
                   <div className="flex items-center gap-2">
@@ -678,14 +658,11 @@ export default function ProfilePage() {
 
               {/* Profile Picture - Right Side */}
               <div className="relative w-20 h-20 md:w-28 md:h-28 rounded-full overflow-hidden flex-shrink-0 ring-4 ring-[#0C1117] -mt-12 md:-mt-16">
-                {profile.avatarUrl && (
-                  <Image
-                    src={profile.avatarUrl}
-                    alt={profile.name}
-                    fill
-                    className="object-cover"
-                  />
-                )}
+                <img
+                  src={getAvatarUrl(profile)}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
 
@@ -838,6 +815,27 @@ export default function ProfilePage() {
         <FollowingModal
           userId={profile.handle}
           onClose={() => setShowFollowingModal(false)}
+        />
+      )}
+      {showEditProfileModal && profile && (
+        <EditProfileModal
+          user={profile}
+          onClose={() => setShowEditProfileModal(false)}
+          onUpdate={async () => {
+            // Refresh profile data
+            const updatedProfile = await getUser(handle);
+            console.log('ProfilePage onUpdate - updatedProfile:', updatedProfile);
+            if (updatedProfile) {
+              setProfile(prev => prev ? {
+                ...prev,
+                name: updatedProfile.name,
+                bio: updatedProfile.bio || '',
+                gender: updatedProfile.gender,
+              } : null);
+            }
+            // Also sync global user state
+            await syncCurrentUser();
+          }}
         />
       )}
     </div>
