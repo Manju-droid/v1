@@ -10,6 +10,7 @@ export interface Hashtag {
   id: string;
   name: string;
   slug: string;
+  category?: string;
   createdBy: string;
   postCount?: number;
   createdAt: Date | string;
@@ -25,6 +26,7 @@ export interface HashtagPost {
 export interface CreateHashtagRequest {
   name: string;
   slug?: string;
+  category?: string;
   createdBy: string;
 }
 

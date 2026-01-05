@@ -10,6 +10,8 @@ export interface MockUser {
   email?: string;
   followerCount?: number;
   followingCount?: number;
+  gender?: string; // For Ghibli-style avatars
+  dateOfBirth?: string;
   languages?: string[]; // Array of language codes, first is primary, second is secondary
 }
 
@@ -45,7 +47,7 @@ export const mockUsers: MockUser[] = [
     id: '1',
     displayName: 'Sarah Chen',
     handle: 'sarah_codes',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah&backgroundColor=b6e3f4',
+    avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Sarah&backgroundColor=b6e3f4',
     bio: 'Full-stack developer | TypeScript enthusiast',
     followerCount: 1234,
     followingCount: 567,
@@ -54,7 +56,7 @@ export const mockUsers: MockUser[] = [
     id: '2',
     displayName: 'Alex Rivera',
     handle: 'alex_designs',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=c0aede',
+    avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Alex&backgroundColor=c0aede',
     bio: 'UI/UX Designer | Creating beautiful experiences',
     followerCount: 2345,
     followingCount: 890,
@@ -63,7 +65,7 @@ export const mockUsers: MockUser[] = [
     id: '3',
     displayName: 'Jamie Park',
     handle: 'jamie_tech',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jamie&backgroundColor=ffd5dc',
+    avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Jamie&backgroundColor=ffd5dc',
     bio: 'Tech blogger | AI & ML researcher',
     followerCount: 5678,
     followingCount: 432,

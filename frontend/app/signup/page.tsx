@@ -103,11 +103,7 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Lock scroll to ensure compact view
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+
 
   const [formData, setFormData] = useState({
     name: '',
@@ -116,6 +112,7 @@ export default function SignUpPage() {
     phoneNumber: '',
     language: '',
     gender: '',
+    dateOfBirth: '',
     password: '',
     confirmPassword: '',
   });
@@ -157,6 +154,7 @@ export default function SignUpPage() {
         phoneNumber: formData.phoneNumber,
         language: formData.language,
         gender: formData.gender,
+        dateOfBirth: formData.dateOfBirth,
         bio: '',
       } as any);
 
@@ -175,7 +173,7 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0C1117] flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-[#0C1117] flex items-center justify-center relative overflow-y-auto py-12">
       <ParticleBackground />
 
       <AnimatePresence>
@@ -323,6 +321,19 @@ export default function SignUpPage() {
                     <option value="female">Female</option>
                     <option value="other">Non-binary / Other</option>
                   </select>
+                </div>
+
+                {/* Date of Birth */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    name="dateOfBirth"
+                    required
+                    value={formData.dateOfBirth}
+                    onChange={handleChange}
+                    className="w-full bg-[#0D1117] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-gray-100 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/50 transition-all"
+                  />
                 </div>
 
                 {/* Password */}

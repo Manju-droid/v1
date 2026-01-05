@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useStore } from '@/lib/store';
 import { PostCard } from '@/features/posts';
 import type { Post } from '@/lib/store';
-import { userAPI, debateAPI, postAPI } from '@v/api-client';
+import { userAPI, debateAPI, postAPI, hashtagAPI } from '@v/api-client';
 
 interface UserResult {
   id: string;
@@ -25,7 +25,14 @@ interface DebateResult {
   participantCount: number;
 }
 
-type Tab = 'all' | 'posts' | 'users' | 'debates';
+interface HashtagResult {
+  slug: string;
+  name: string;
+  posts: number;
+  category?: string;
+}
+
+type Tab = 'all' | 'posts' | 'users' | 'debates' | 'hashtags';
 
 export default function SearchPage() {
   const router = useRouter();
@@ -35,6 +42,7 @@ export default function SearchPage() {
   const [activeTab, setActiveTab] = useState<Tab>('all');
   const [users, setUsers] = useState<UserResult[]>([]);
   const [debates, setDebates] = useState<DebateResult[]>([]);
+  const [hashtags, setHashtags] = useState<HashtagResult[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const { toggleFollow, isFollowing, currentUser } = useStore(); // Get currentUser to exclude from search
@@ -67,8 +75,11 @@ export default function SearchPage() {
             bio: user.bio || '',
           }));
 
-        setUsers(mappedUsers);
-        console.log(`[Search] Loaded ${mappedUsers.length} users (excluded current user)`);
+        // Deduplicate users by ID
+        const uniqueUsers = Array.from(new Map(mappedUsers.map((u: any) => [u.id, u])).values());
+
+        setUsers(uniqueUsers as UserResult[]);
+        console.log(`[Search] Loaded ${uniqueUsers.length} users (excluded current user)`);
       } else {
         console.warn('[Search] No users data received or invalid format:', usersData);
         setUsers([]);
@@ -77,19 +88,47 @@ export default function SearchPage() {
       // Load debates
       const debatesData = await debateAPI.list({ limit: 50 });
       if (debatesData) {
-        setDebates(debatesData.map((debate: any) => ({
-          id: debate.id,
-          title: debate.title,
-          description: debate.description || '',
-          category: debate.category,
-          participantCount: debate.participants?.length || 0,
-        })));
+        // Deduplicate debates
+        setDebates(prev => {
+          const mapped = debatesData.map((debate: any) => ({
+            id: debate.id,
+            title: debate.title,
+            description: debate.description || '',
+            category: debate.category,
+            participantCount: debate.participants?.length || 0,
+          }));
+
+          // Use Map to distinct by ID
+          const unique = Array.from(new Map(mapped.map((d: any) => [d.id, d])).values());
+          return unique as DebateResult[];
+        });
+      }
+
+      // Load hashtags
+      const hashtagsData = await hashtagAPI.list({ limit: 100 });
+      if (hashtagsData && Array.isArray(hashtagsData)) {
+        const mappedHashtags = hashtagsData.map((item: any) => {
+          const h = item.hashtag || item;
+          return {
+            slug: h.slug,
+            name: h.name || h.slug,
+            posts: h.posts || item.posts || 0,
+            category: h.category || 'General',
+          };
+        });
+
+        // Deduplicate hashtags by slug
+        const uniqueHashtags = Array.from(new Map(mappedHashtags.map((h: any) => [h.slug, h])).values());
+        setHashtags(uniqueHashtags as HashtagResult[]);
       }
 
       // Load posts
       const postsData = await postAPI.list({ limit: 50 });
-      if (postsData) {
-        setPosts(postsData as unknown as Post[]);
+      if (postsData && Array.isArray(postsData)) {
+        // Deduplicate posts
+        // @ts-ignore
+        const uniquePosts = Array.from(new Map(postsData.map((p: any) => [p.id, p])).values());
+        setPosts(uniquePosts as Post[]);
       }
 
     } catch (error) {
@@ -159,6 +198,16 @@ export default function SearchPage() {
     );
   }, [debates, searchQuery]);
 
+  const filteredHashtags = useMemo(() => {
+    if (!searchQuery) return [];
+    const lowerQuery = searchQuery.toLowerCase();
+    return hashtags.filter(hashtag =>
+      hashtag.name.toLowerCase().includes(lowerQuery) ||
+      hashtag.slug.toLowerCase().includes(lowerQuery) ||
+      (hashtag.category && hashtag.category.toLowerCase().includes(lowerQuery))
+    );
+  }, [hashtags, searchQuery]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -171,13 +220,15 @@ export default function SearchPage() {
     { id: 'posts', label: 'Posts', count: filteredPosts.length },
     { id: 'users', label: 'Users', count: filteredUsers.length },
     { id: 'debates', label: 'Debates', count: filteredDebates.length },
+    { id: 'hashtags', label: 'Hashtags', count: filteredHashtags.length },
   ];
 
   const showPosts = activeTab === 'all' || activeTab === 'posts';
   const showUsers = activeTab === 'all' || activeTab === 'users';
   const showDebates = activeTab === 'all' || activeTab === 'debates';
+  const showHashtags = activeTab === 'all' || activeTab === 'hashtags';
 
-  const hasResults = filteredPosts.length > 0 || filteredUsers.length > 0 || filteredDebates.length > 0;
+  const hasResults = filteredPosts.length > 0 || filteredUsers.length > 0 || filteredDebates.length > 0 || filteredHashtags.length > 0;
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -390,6 +441,50 @@ export default function SearchPage() {
                             className="px-4 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-sm font-semibold transition-colors flex-shrink-0"
                           >
                             Join
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Hashtags Section */}
+              {showHashtags && filteredHashtags.length > 0 && (
+                <section>
+                  {activeTab === 'all' && (
+                    <h2 className="text-lg font-bold text-white mb-4">Hashtags</h2>
+                  )}
+                  <div className="space-y-2">
+                    {filteredHashtags.map((hashtag) => (
+                      <motion.div
+                        key={hashtag.slug}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-gray-900/50 border border-white/[0.06] rounded-xl hover:bg-gray-800/50 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/hashtag/${hashtag.slug}`)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 font-bold shrink-0">
+                              #
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-white font-semibold flex items-center gap-2">
+                                  #{hashtag.name}
+                                  <span className="px-2 py-0.5 rounded-full bg-gray-700 text-xs text-gray-400 border border-gray-600">
+                                    {hashtag.category}
+                                  </span>
+                                </h3>
+                              </div>
+                              <p className="text-gray-400 text-sm">{hashtag.posts} posts</p>
+                            </div>
+                          </div>
+                          <button
+                            className="px-4 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold transition-colors"
+                          >
+                            View
                           </button>
                         </div>
                       </motion.div>

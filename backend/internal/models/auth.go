@@ -29,7 +29,9 @@ type SignupRequest struct {
 	Email       string `json:"email"`
 	PhoneNumber string `json:"phoneNumber"`
 	Language    string `json:"language"`
+	Gender      string `json:"gender"`
 	Password    string `json:"password"`
+	DateOfBirth string `json:"dateOfBirth"`
 	Bio         string `json:"bio"`
 }
 

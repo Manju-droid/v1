@@ -31,6 +31,8 @@ export const syncCurrentUser = async (): Promise<void> => {
           handle: user.handle,
           avatar: user.avatarUrl,
           bio: user.bio || '',
+          gender: user.gender,
+          dateOfBirth: user.dateOfBirth,
         };
         console.log('✅ Synced current user:', currentUser.handle, currentUser.displayName, currentUser.id);
       } else {
@@ -42,13 +44,13 @@ export const syncCurrentUser = async (): Promise<void> => {
       // Clear current user on auth failure
       currentUser = null;
       // Log auth errors for debugging
-      const isAuthError = e.isUnauthorized || 
-          e.status === 401 ||
-          e.message?.includes('Invalid email or password') ||
-          e.message?.includes('Unauthorized') ||
-          e.message?.includes('401') ||
-          e.message?.includes('Authorization header required');
-      
+      const isAuthError = e.isUnauthorized ||
+        e.status === 401 ||
+        e.message?.includes('Invalid email or password') ||
+        e.message?.includes('Unauthorized') ||
+        e.message?.includes('401') ||
+        e.message?.includes('Authorization header required');
+
       if (isAuthError) {
         console.log('[currentUser] Auth error (expected if not logged in):', e.message);
       } else {
@@ -66,7 +68,7 @@ export const updateCurrentUser = (updates: Partial<MockUser> | null): void => {
   if (updates === null) {
     currentUser = null;
   } else if (currentUser) {
-  currentUser = { ...currentUser, ...updates };
+    currentUser = { ...currentUser, ...updates };
   }
 };
 

@@ -7,12 +7,19 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { hashtagAPI, userAPI } from '@v/api-client';
-import { getAvatarUrl } from '@/lib/avatar';
+import { Avatar } from '@/components/ui/Avatar';
 
 export const RightSidebar: React.FC = () => {
   const router = useRouter();
-  const { toggleFollow, isFollowing } = useStore();
-  const [trendingHashtags, setTrendingHashtags] = useState<any[]>([]);
+  const { toggleFollow, isFollowing, currentUser } = useStore();
+
+  const [activeTab, setActiveTab] = useState<'1h' | '24h' | 'all'>('24h');
+  const [trendingData, setTrendingData] = useState<{
+    trending_1h: any[];
+    trending_24h: any[];
+    popular_all_time: any[];
+  }>({ trending_1h: [], trending_24h: [], popular_all_time: [] });
+
   const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,29 +27,28 @@ export const RightSidebar: React.FC = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [hashtagsData, usersData] = await Promise.all([
-          hashtagAPI.list(),
-          userAPI.list({ limit: 5 })
+        const [trendResp, usersResp] = await Promise.all([
+          hashtagAPI.getTrending(),
+          userAPI.list({ limit: 20 })
         ]);
 
-        if (Array.isArray(hashtagsData)) {
-          // Flatten and sort by post count
-          const sortedHashtags = hashtagsData
-            .map((item: any) => ({
-              ...item.hashtag,
-              posts: item.posts,
-              followers: item.followers,
-              trending: item.trending,
-              boosts: item.boosts,
-              shouts: item.shouts
-            }))
-            .sort((a: any, b: any) => (b.posts || 0) - (a.posts || 0))
-            .slice(0, 1);
-          setTrendingHashtags(sortedHashtags);
+        if (trendResp) {
+          setTrendingData({
+            trending_1h: trendResp.trending_1h || [],
+            trending_24h: trendResp.trending_24h || [],
+            popular_all_time: trendResp.popular_all_time || []
+          });
         }
 
+        const usersData = Array.isArray(usersResp) ? usersResp : [];
         if (Array.isArray(usersData)) {
-          setSuggestedUsers(usersData.slice(0, 5));
+          // Filter out current user and already followed users
+          const filteredUsers = usersData.filter((user: any) => {
+            const isMe = currentUser?.id === user.id;
+            const isFollowed = isFollowing(user.id);
+            return !isMe && !isFollowed;
+          });
+          setSuggestedUsers(filteredUsers.slice(0, 5));
         }
       } catch (error) {
         console.error('Failed to load sidebar data:', error);
@@ -52,7 +58,7 @@ export const RightSidebar: React.FC = () => {
     };
 
     loadData();
-  }, []);
+  }, [currentUser?.id]); // Re-run when user changes
 
   const handleFollow = async (user: any) => {
     // Update global Zustand store (which handles backend sync)
@@ -74,6 +80,10 @@ export const RightSidebar: React.FC = () => {
     );
   }
 
+  const displayedHashtags = activeTab === '1h' ? trendingData.trending_1h
+    : activeTab === '24h' ? trendingData.trending_24h
+      : trendingData.popular_all_time;
+
   return (
     <aside className="hidden xl:block w-[340px] h-full fixed right-0 top-16 overflow-y-auto py-6 px-4 space-y-6">
       {/* Trending Topics */}
@@ -83,12 +93,41 @@ export const RightSidebar: React.FC = () => {
         transition={{ duration: 0.3 }}
         className="bg-gray-900/60 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-5"
       >
-        <h2 className="text-lg font-bold text-white mb-4">Trending on V</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-white">Trending</h2>
+          <div className="flex bg-gray-800/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveTab('1h')}
+              className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-md transition-all ${activeTab === '1h' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
+                }`}
+            >
+              1h
+            </button>
+            <button
+              onClick={() => setActiveTab('24h')}
+              className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-md transition-all ${activeTab === '24h' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
+                }`}
+            >
+              24h
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-md transition-all ${activeTab === 'all' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-white'
+                }`}
+            >
+              All
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-3">
-          {trendingHashtags.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">No trending hashtags yet</p>
+          {displayedHashtags.length === 0 ? (
+            <div className="text-center py-6 px-2">
+              <p className="text-gray-400 text-sm font-medium mb-1">No trending topics yet</p>
+              <p className="text-xs text-gray-500">Trends appear when topics spike in conversation.</p>
+            </div>
           ) : (
-            trendingHashtags.map((hashtag, index) => {
+            displayedHashtags.map((hashtag, index) => {
               return (
                 <motion.div
                   key={hashtag.slug || index}
@@ -103,7 +142,7 @@ export const RightSidebar: React.FC = () => {
                       <span className="font-semibold text-sm text-cyan-400">
                         #{hashtag.name || hashtag.slug}
                       </span>
-                      {hashtag.trending && (
+                      {(index < 3 && activeTab !== 'all') && (
                         <span className="text-orange-400 text-xs">🔥</span>
                       )}
                     </div>
@@ -145,11 +184,10 @@ export const RightSidebar: React.FC = () => {
                     href={`/u/${user.handle}`}
                     className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-cyan-500/20 hover:ring-cyan-500/40 transition-all cursor-pointer"
                   >
-                    <Image
-                      src={getAvatarUrl(user)}
-                      alt={user.name}
-                      fill
-                      className="object-cover"
+                    <Avatar
+                      user={user}
+                      size="100%"
+                      className="w-full h-full"
                     />
                   </Link>
                   <div className="flex-1 min-w-0">

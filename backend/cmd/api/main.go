@@ -212,10 +212,10 @@ func NewServer(cfg *config.Config) *Server {
 	analyticsRepo := memory.NewAnalyticsMemoryRepository(postRepo)
 
 	// Initialize default users (for development/demo)
-	initializeDefaultUsers(userRepo)
+	// initializeDefaultUsers(userRepo)
 
 	// Initialize sample notifications (for development/demo)
-	initializeSampleNotifications(notifRepo)
+	// initializeSampleNotifications(notifRepo)
 
 	// Initialize services
 	pointsService := service.NewPointsService(userRepo)
@@ -362,6 +362,7 @@ func NewServer(cfg *config.Config) *Server {
 		// Hashtag routes
 		r.Route("/hashtags", func(r chi.Router) {
 			r.Get("/", hashtagHandlers.List)
+			r.Get("/trending", hashtagHandlers.GetTrending)
 			r.Post("/", hashtagHandlers.Create)
 			r.Get("/{slug}", hashtagHandlers.GetBySlug)
 			r.Delete("/{slug}", hashtagHandlers.Delete)

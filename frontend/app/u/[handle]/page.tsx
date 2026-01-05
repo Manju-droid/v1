@@ -17,7 +17,7 @@ import { messageAPI, postAPI, userAPI } from '@v/api-client';
 import { PointsDisplay } from '@/components/ui/PointsDisplay';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { getCurrentUser, syncCurrentUser } from '@/lib/currentUser';
-import { getAvatarUrl } from '@/lib/avatar';
+import { Avatar } from '@/components/ui/Avatar';
 
 type TabType = 'posts' | 'replies' | 'saved';
 
@@ -40,6 +40,7 @@ interface UserProfile {
   email?: string;
   bio: string;
   gender?: string;
+  dateOfBirth?: string;
   avatarUrl: string;
   coverPhotoUrl?: string;
   followersOnlyComments?: boolean;
@@ -200,6 +201,8 @@ export default function ProfilePage() {
           handle: profileData.handle || handle,
           email: profileData.email,
           bio: profileData.bio || '',
+          gender: profileData.gender,
+          dateOfBirth: profileData.dateOfBirth,
           avatarUrl: profileData.avatarUrl || '',
           coverPhotoUrl: profileData.coverPhotoUrl,
           followersOnlyComments: profileData.followersOnlyComments,
@@ -656,12 +659,11 @@ export default function ProfilePage() {
                 ) : null}
               </div>
 
-              {/* Profile Picture - Right Side */}
-              <div className="relative w-20 h-20 md:w-28 md:h-28 rounded-full overflow-hidden flex-shrink-0 ring-4 ring-[#0C1117] -mt-12 md:-mt-16">
-                <img
-                  src={getAvatarUrl(profile)}
-                  alt={profile.name}
-                  className="w-full h-full object-cover"
+              <div className="relative w-20 h-20 md:w-28 md:h-28 flex-shrink-0 -mt-12 md:-mt-16 ring-4 ring-[#0C1117] rounded-full">
+                <Avatar
+                  user={profile}
+                  size="100%"
+                  className="w-full h-full"
                 />
               </div>
             </div>
@@ -708,13 +710,12 @@ export default function ProfilePage() {
               >
                 <div className="max-w-[900px] mx-auto flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-cyan-500/20">
-                      <Image
-                        src={profile.avatarUrl}
-                        alt={profile.name}
-                        width={40}
-                        height={40}
-                        className="object-cover"
+                    <div className="relative w-10 h-10 flex-shrink-0 cursor-pointer">
+                      <Avatar
+                        user={profile}
+                        size="100%"
+                        className="w-full h-full"
+                        showBorder
                       />
                     </div>
                     <div>
@@ -831,6 +832,8 @@ export default function ProfilePage() {
                 name: updatedProfile.name,
                 bio: updatedProfile.bio || '',
                 gender: updatedProfile.gender,
+                dateOfBirth: updatedProfile.dateOfBirth,
+                avatarUrl: updatedProfile.avatarUrl,
               } : null);
             }
             // Also sync global user state

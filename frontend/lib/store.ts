@@ -105,6 +105,8 @@ export const useStore = create<AppState>((set, get) => ({
                   displayName: user.displayName,
                   handle: user.handle,
                   avatar: user.avatar,
+                  gender: user.gender, // Ensure gender is preserved
+                  dateOfBirth: user.dateOfBirth,
                 }
               };
             }
@@ -137,6 +139,7 @@ export const useStore = create<AppState>((set, get) => ({
           avatar: user.avatar || user.avatarUrl || '',
           bio: user.bio || '',
           email: user.email,
+          gender: user.gender,
           followerCount: user.followersCount || user.followerCount,
           followingCount: user.followingCount,
         };
@@ -185,6 +188,7 @@ export const useStore = create<AppState>((set, get) => ({
                   displayName: fetchedAuthor.displayName || fetchedAuthor.handle,
                   handle: fetchedAuthor.handle,
                   avatar: fetchedAuthor.avatarUrl || '',
+                  gender: fetchedAuthor.gender,
                 };
               }
             } catch (error) {

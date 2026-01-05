@@ -14,13 +14,15 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['framer-motion'],
   },
-  
+
   // Transpile workspace packages for Next.js
   transpilePackages: ['@v/shared', '@v/api-client'],
 
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       {
         protocol: 'https',

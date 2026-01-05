@@ -290,7 +290,7 @@ export const hashtagAPI = {
   list: async () => {
     const data = await request<any>('/hashtags');
     console.log('[hashtagAPI.list] Raw API response:', data);
-    
+
     // Backend returns { success: true, data: { hashtags: [...] } }
     // Or it might be direct { hashtags: [...] }
     let hashtags = [];
@@ -301,9 +301,9 @@ export const hashtagAPI = {
     } else if (data && data.data && data.data.hashtags && Array.isArray(data.data.hashtags)) {
       hashtags = data.data.hashtags;
     }
-    
+
     console.log('[hashtagAPI.list] Extracted hashtags:', hashtags.length);
-    
+
     // Flatten the hashtag objects if they're wrapped in a "hashtag" field
     return hashtags.map((item: any) => {
       if (item.hashtag) {
@@ -342,6 +342,11 @@ export const hashtagAPI = {
     const data = await request<any>(`/hashtags/${slug}/posts`);
     return Array.isArray(data) ? data : [];
   },
+
+  getTrending: async () => {
+    const data = await request<any>('/hashtags/trending');
+    return data;
+  },
 };
 
 // ============================================================================
@@ -351,7 +356,7 @@ export const hashtagAPI = {
 export const notificationAPI = {
   list: async (params?: { limit?: number; offset?: number }) => {
     try {
-    const data = await request<any>(`/notifications?${new URLSearchParams(params as any)}`);
+      const data = await request<any>(`/notifications?${new URLSearchParams(params as any)}`);
       console.log('[Notification API] Raw response:', data);
       // Handle both array and object with notifications property
       if (Array.isArray(data)) {

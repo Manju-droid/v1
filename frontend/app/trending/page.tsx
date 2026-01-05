@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LeftNav } from '@/components/feed/LeftNav';
 import { MobileNav } from '@/components/feed/MobileNav';
 import { FeedHeader } from '@/components/feed/FeedHeader';
@@ -21,24 +21,104 @@ interface TrendingHashtag {
   boosts: number;
   shouts: number;
   momentum: number;
+  category: string;
 }
+
+const CATEGORIES = ['Technology', 'Entertainment', 'Politics', 'Sports', 'Education', 'General'];
+
+// Section Component
+const TrendingSection = ({ title, hashtags, onRowClick }: { title: string, hashtags: TrendingHashtag[], onRowClick: (slug: string) => void }) => {
+  if (!hashtags || hashtags.length === 0) return null;
+
+  return (
+    <div className="mb-8">
+      {title && <h3 className="text-xl font-bold text-gray-100 mb-4 px-1 border-l-4 border-cyan-500 pl-3">{title}</h3>}
+
+      {/* Table - Desktop */}
+      <div className="hidden lg:block bg-[#1F2937]/30 rounded-xl border border-white/[0.06] overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-[#1F2937] border-b border-white/[0.08]">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider w-16">Rank</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Hashtag</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Posts</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Momentum</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.06]">
+            {hashtags.map((hashtag, index) => (
+              <motion.tr
+                key={hashtag.slug}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: index * 0.05 }}
+                onClick={() => onRowClick(hashtag.slug)}
+                className="hover:bg-[#1F2937] cursor-pointer transition-colors"
+                role="button"
+              >
+                <td className="px-4 py-3 text-sm text-gray-500 font-mono">#{index + 1}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-white">#{hashtag.name}</span>
+                    {hashtag.momentum >= MOMENTUM_THRESHOLD && (
+                      <span className="text-lg" role="img" aria-label="Trending">🔥</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right text-sm text-gray-300">{hashtag.posts}</td>
+                <td className="px-4 py-3 text-right text-sm text-gray-300 font-medium bg-white/[0.02]">{hashtag.momentum}</td>
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile: Cards */}
+      <div className="lg:hidden space-y-3">
+        {hashtags.map((hashtag, index) => (
+          <motion.div
+            key={hashtag.slug}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => onRowClick(hashtag.slug)}
+            className="bg-[#1F2937]/50 border border-white/[0.06] rounded-lg p-4 cursor-pointer active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-bold text-white">#{hashtag.name}</span>
+                {hashtag.momentum >= MOMENTUM_THRESHOLD && <span className="text-lg">🔥</span>}
+              </div>
+              <span className="text-xs text-gray-500 font-mono">#{index + 1}</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>{hashtag.posts} posts</span>
+              <span className="text-cyan-400">{hashtag.momentum} momentum</span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default function TrendingPage() {
   const router = useRouter();
-  // const { posts } = useStore(); // Removed
-  const [hashtags, setHashtags] = useState<TrendingHashtag[]>([]);
+  const [trendingData, setTrendingData] = useState<{
+    global: TrendingHashtag[];
+    byCategory: Record<string, TrendingHashtag[]>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<string>(CATEGORIES[0]);
 
   useEffect(() => {
     const loadTrending = async () => {
       try {
         setLoading(true);
-        const data = await hashtagAPI.list();
+        const data = await hashtagAPI.getTrending();
         if (data) {
-          // Map API data to TrendingHashtag interface
-          // Assuming API returns { slug, name, posts, boosts, shouts }
-          // If not, we might need to adjust or mock the missing fields for now
-          const formattedHashtags: TrendingHashtag[] = data.map((h: any) => {
+          // Helper to format API hashtag to local model
+          const format = (h: any): TrendingHashtag => {
             const hashtagInfo = h.hashtag || h;
             return {
               slug: hashtagInfo.slug,
@@ -47,9 +127,22 @@ export default function TrendingPage() {
               boosts: h.boosts || 0,
               shouts: h.shouts || 0,
               momentum: (h.boosts || 0) - (h.shouts || 0),
+              category: hashtagInfo.category || 'General',
             };
-          });
-          setHashtags(formattedHashtags);
+          };
+
+          // Process 24h data as main content
+          const global = (data.trending_24h || []).map(format);
+
+          const byCategory: Record<string, TrendingHashtag[]> = {};
+          if (data.trending_by_category_24h) {
+            Object.entries(data.trending_by_category_24h).forEach(([cat, list]) => {
+              // @ts-ignore
+              byCategory[cat] = (list || []).map(format);
+            });
+          }
+
+          setTrendingData({ global, byCategory });
         }
       } catch (error) {
         console.error('Failed to load trending hashtags:', error);
@@ -120,23 +213,7 @@ export default function TrendingPage() {
   //   return Array.from(hashtagMap.values());
   // }, [posts]);
 
-  // Filter and sort trending hashtags
-  const filteredAndSortedHashtags = useMemo(() => {
-    let filtered = [...hashtags];
-
-    // Only show hashtags with 100k+ posts (or lower for demo purposes if backend has less data)
-    // For now, let's lower the threshold or remove it if data is scarce
-    // filtered = filtered.filter(h => h.posts >= MIN_POSTS_FOR_TRENDING);
-
-    // Sort by momentum (default) - higher momentum first
-    filtered.sort((a, b) => b.momentum - a.momentum);
-
-    // Show only top 10 trending hashtags
-    return filtered.slice(0, MAX_TRENDING_HASHTAGS);
-  }, [hashtags]);
-
-  // Since we're only showing top 10, no need for infinite scroll
-  const displayedHashtags = filteredAndSortedHashtags;
+  // No local filtering/sorting needed as API returns curated lists
 
   const handleRowClick = (slug: string) => {
     router.push(`/hashtag/${slug}`);
@@ -178,163 +255,74 @@ export default function TrendingPage() {
               </div>
             </div>
 
-            {/* Content */}
-            <div className="space-y-4">
-              {/* Desktop: Table */}
-              <div className="hidden lg:block">
-                <table className="w-full">
-                  <thead className="bg-[#1F2937] border-b border-white/[0.08] sticky top-32 z-10">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Rank
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Hashtag
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Posts
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Boosts
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Shouts
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.06]">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center">
-                          <div className="flex justify-center">
-                            <div className="w-8 h-8 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : displayedHashtags.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
-                          <p className="text-sm">No trends yet—check back soon</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      displayedHashtags.map((hashtag, index) => (
-                        <motion.tr
-                          key={hashtag.slug}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: index * 0.02 }}
-                          onClick={() => handleRowClick(hashtag.slug)}
-                          className="bg-[#1F2937]/50 hover:bg-[#1F2937] cursor-pointer transition-colors"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleRowClick(hashtag.slug);
-                            }
-                          }}
-                          role="button"
-                          aria-label={`View ${hashtag.name} hashtag`}
-                        >
-                          <td className="px-4 py-4 text-sm text-gray-400">
-                            {index + 1}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-white">
-                                #{hashtag.name}
-                              </span>
-                              {hashtag.momentum >= MOMENTUM_THRESHOLD && (
-                                <span className="text-lg" role="img" aria-label="Trending">🔥</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-right text-sm text-gray-300">
-                            {hashtag.posts}
-                          </td>
-                          <td className="px-4 py-4 text-right text-sm text-gray-300">
-                            {hashtag.boosts}
-                          </td>
-                          <td className="px-4 py-4 text-right text-sm text-gray-300">
-                            {hashtag.shouts}
-                          </td>
-                        </motion.tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile: Cards */}
-              <div className="lg:hidden space-y-3">
-                {displayedHashtags.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-sm text-gray-400">No trends yet—check back soon</p>
-                  </div>
-                ) : (
-                  displayedHashtags.map((hashtag, index) => (
-                    <motion.div
-                      key={hashtag.slug}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.02 }}
-                      onClick={() => handleRowClick(hashtag.slug)}
-                      className="bg-[#1F2937]/50 hover:bg-[#1F2937] border border-white/[0.06] rounded-lg p-4 cursor-pointer transition-colors"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleRowClick(hashtag.slug);
-                        }
-                      }}
-                      role="button"
-                      aria-label={`View ${hashtag.name} hashtag`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-white">
-                            #{hashtag.name}
-                          </span>
-                          {hashtag.momentum >= MOMENTUM_THRESHOLD && (
-                            <span className="text-xl" role="img" aria-label="Trending">🔥</span>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-400">#{index + 1}</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 text-sm">
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Posts</div>
-                          <div className="text-gray-300 font-medium">{hashtag.posts}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Boosts</div>
-                          <div className="text-gray-300 font-medium">{hashtag.boosts}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 mb-1">Shouts</div>
-                          <div className="text-gray-300 font-medium">{hashtag.shouts}</div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
-
-              {/* Empty state message */}
-              {displayedHashtags.length === 0 && (
-                <div className="text-center py-12">
-                  <p className="text-gray-400 text-sm">No trending hashtags yet—check back soon</p>
-                  <p className="text-gray-500 text-xs mt-2">Hashtags need 100k+ posts to appear in trending</p>
+            {/* Content Container */}
+            <div className="space-y-6">
+              {loading ? (
+                <div className="flex justify-center py-20">
+                  <div className="w-10 h-10 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
                 </div>
+              ) : (
+                <>
+                  {/* Category Tabs */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                    {CATEGORIES.map(category => (
+                      <button
+                        key={category}
+                        onClick={() => setActiveTab(category)}
+                        className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${activeTab === category
+                          ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                          : 'bg-[#1F2937]/50 text-gray-400 hover:text-white hover:bg-[#1F2937] border border-white/[0.06]'
+                          }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="min-h-[400px]">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        {/* Specific Category Top List */}
+                        {(trendingData?.byCategory[activeTab] && trendingData.byCategory[activeTab].length > 0) ? (
+                          <TrendingSection
+                            title={`Top Trending in ${activeTab}`}
+                            hashtags={trendingData.byCategory[activeTab] || []}
+                            onRowClick={handleRowClick}
+                          />
+                        ) : (
+                          <div className="text-center py-20 bg-[#1F2937]/30 rounded-2xl border border-white/[0.04]">
+                            <div className="flex flex-col items-center gap-4">
+                              <span className="text-4xl">📉</span>
+                              <div>
+                                <p className="text-gray-300 font-medium mb-1">No trending in {activeTab}</p>
+                                <p className="text-gray-500 text-sm">Be the first to start a trend in this category!</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </>
               )}
             </div>
+
+
           </div>
         </div>
-
-        {/* Mobile Navigation */}
-        <MobileNav />
       </div>
+
+      {/* Mobile Navigation */}
+      <MobileNav />
     </div>
+
   );
 }
 

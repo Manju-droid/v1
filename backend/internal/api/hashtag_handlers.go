@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,7 @@ func (h *HashtagHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string `json:"name"`
 		Slug      string `json:"slug"`
+		Category  string `json:"category"`
 		CreatedBy string `json:"createdBy"`
 	}
 
@@ -53,10 +55,44 @@ func (h *HashtagHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate slug if not provided
-	if req.Slug == "" {
-		req.Slug = strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
+	// Validate Category
+	validCategories := map[string]bool{
+		"Technology": true, "Entertainment": true, "Politics": true,
+		"Sports": true, "Education": true, "General": true,
 	}
+	category := "General"
+	if req.Category != "" {
+		for c := range validCategories {
+			if strings.EqualFold(c, req.Category) {
+				category = c
+				break
+			}
+		}
+	}
+
+	// Generate slug if not provided, or normalize provided slug
+	// Strategy: Lowercase, remove '#', remove all non-alphanumeric characters
+	// This ensures #TermsAndConditions becomes termsandconditions, avoiding duplicates
+	baseName := req.Slug
+	if baseName == "" {
+		baseName = req.Name
+	}
+
+	reg, err := regexp.Compile("[^a-z0-9]+")
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "Regex error")
+		return
+	}
+
+	normalizedSlug := strings.ToLower(baseName)
+	normalizedSlug = strings.ReplaceAll(normalizedSlug, "#", "") // Remove hash
+	normalizedSlug = reg.ReplaceAllString(normalizedSlug, "")    // Remove special chars
+
+	if normalizedSlug == "" {
+		Error(w, http.StatusBadRequest, "Invalid hashtag name: must contain alphanumeric characters")
+		return
+	}
+	req.Slug = normalizedSlug
 
 	// Check if slug already exists
 	if existing, _ := h.repo.GetBySlug(req.Slug); existing != nil {
@@ -68,6 +104,7 @@ func (h *HashtagHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		ID:        uuid.New().String(),
 		Name:      req.Name,
 		Slug:      req.Slug,
+		Category:  category,
 		CreatedBy: req.CreatedBy,
 		CreatedAt: time.Now(),
 	}
@@ -369,4 +406,60 @@ func (h *HashtagHandlers) Unfollow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	Success(w, "Unfollowed hashtag")
+}
+
+func (h *HashtagHandlers) GetTrending(w http.ResponseWriter, r *http.Request) {
+	// Check for optional authentication
+	var currentUserID string
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString := authHeader[7:]
+		if claims, err := auth.ValidateToken(tokenString); err == nil {
+			currentUserID = claims.UserID
+		}
+	}
+
+	enrich := func(hashtags []*models.Hashtag) []map[string]interface{} {
+		enriched := make([]map[string]interface{}, 0, len(hashtags))
+		for _, hashtag := range hashtags {
+			boosts, shouts, _ := h.repo.GetHashtagStats(hashtag.ID)
+			isFollowing := false
+			if currentUserID != "" {
+				isFollowing, _ = h.repo.IsFollowing(currentUserID, hashtag.ID)
+			}
+
+			enriched = append(enriched, map[string]interface{}{
+				"hashtag":     hashtag,
+				"boosts":      boosts,
+				"shouts":      shouts,
+				"posts":       boosts + shouts,
+				"momentum":    boosts - shouts,
+				"isFollowing": isFollowing,
+				"followers":   hashtag.Followers,
+			})
+		}
+		return enriched
+	}
+
+	enrichMap := func(categoryMap map[string][]*models.Hashtag) map[string][]map[string]interface{} {
+		result := make(map[string][]map[string]interface{})
+		for cat, list := range categoryMap {
+			result[cat] = enrich(list)
+		}
+		return result
+	}
+
+	trending1h, _ := h.repo.GetTrending(1*time.Hour, 10)
+	trending24h, _ := h.repo.GetTrending(24*time.Hour, 10)
+	trendingCat1h, _ := h.repo.GetTrendingByCategory(1*time.Hour, 5)
+	trendingCat24h, _ := h.repo.GetTrendingByCategory(24*time.Hour, 5)
+	popular, _ := h.repo.GetPopular(10)
+
+	JSON(w, http.StatusOK, map[string]interface{}{
+		"trending_1h":              enrich(trending1h),
+		"trending_24h":             enrich(trending24h),
+		"trending_by_category_1h":  enrichMap(trendingCat1h),
+		"trending_by_category_24h": enrichMap(trendingCat24h),
+		"popular_all_time":         enrich(popular),
+	})
 }

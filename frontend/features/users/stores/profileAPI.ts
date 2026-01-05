@@ -9,6 +9,7 @@ export interface UserProfile {
   handle: string;
   bio: string;
   gender?: string;
+  dateOfBirth?: string;
   avatarUrl: string;
   coverPhotoUrl?: string;
   followersOnlyComments?: boolean;
@@ -56,6 +57,7 @@ export const getUser = async (handle: string): Promise<UserProfile | null> => {
       email: user.email,
       bio: user.bio ?? '',
       gender: (user as any).gender,
+      dateOfBirth: (user as any).dateOfBirth,
       avatarUrl: user.avatarUrl ?? '',
       coverPhotoUrl: user.coverPhotoUrl,
       followersOnlyComments: user.followersOnlyComments || false,
@@ -319,7 +321,7 @@ export const removeCoverPhoto = async (): Promise<void> => {
 };
 
 // Update user profile settings
-export const updateUserProfile = async (updates: { name?: string; handle?: string; email?: string; password?: string; bio?: string; gender?: string; avatarUrl?: string; followersOnlyComments?: boolean }, userId?: string): Promise<void> => {
+export const updateUserProfile = async (updates: { name?: string; handle?: string; email?: string; password?: string; bio?: string; gender?: string; dateOfBirth?: string; avatarUrl?: string; followersOnlyComments?: boolean }, userId?: string): Promise<void> => {
   try {
     const user = getCurrentUser();
     const idToUse = userId || user?.id;

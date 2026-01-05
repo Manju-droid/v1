@@ -8,6 +8,7 @@ import { useStore, getCurrentUserMock, currentUserMock } from '@/lib/store';
 import { syncCurrentUser } from '@/lib/currentUser';
 import { updateUserProfile, getUser, useUserStore } from '@/features/users';
 import { checkAbusiveContent } from '@/lib/abuse-detection';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface ComposerProps {
   onPost?: (content: string, media?: { type: 'image' | 'video'; file: File }, options?: { commentsDisabled?: boolean; commentLimit?: number }) => void;
@@ -19,7 +20,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
   const { userPoints } = useUserStore();
   const [currentUser, setCurrentUser] = useState(getCurrentUserMock());
   const [isSynced, setIsSynced] = useState(false);
-  
+
   const [content, setContent] = useState('');
   const [attachedMedia, setAttachedMedia] = useState<{ type: 'image' | 'video'; file: File; preview: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -30,11 +31,11 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Check for abusive content
   const isAbusive = content.trim() ? checkAbusiveContent(content) : false;
   const isMuted = !!(userPoints?.temporarilyMuted && userPoints.mutedUntil && new Date(userPoints.mutedUntil) > new Date());
-  
+
   // Sync current user on mount
   useEffect(() => {
     syncCurrentUser().then(() => {
@@ -53,10 +54,10 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
       });
     }
   }, [isSynced]);
-  
+
   const maxChars = 280;
   const remaining = maxChars - content.length;
-  
+
   // Sync local state with store preferences
   useEffect(() => {
     setCommentsDisabled(userCommentPreferences.commentsDisabled);
@@ -66,7 +67,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
   const handlePost = () => {
     if (content.trim() && onPost) {
       onPost(
-        content.trim(), 
+        content.trim(),
         attachedMedia ? { type: attachedMedia.type, file: attachedMedia.file } : undefined,
         { commentsDisabled, commentLimit }
       );
@@ -117,7 +118,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
       const end = textarea.selectionEnd;
       const newContent = content.slice(0, start) + emoji + content.slice(end);
       setContent(newContent);
-      
+
       // Set cursor position after emoji
       setTimeout(() => {
         textarea.focus();
@@ -146,17 +147,23 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
     >
       <div className="flex gap-3">
         {/* Avatar */}
-        <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-cyan-500/20 bg-gray-800">
-          {isSynced && currentUser?.avatar ? (
-            <Image
-              src={currentUser.avatar}
-              alt={currentUser.displayName || 'User'}
-              fill
-              className="object-cover"
-              key={currentUser.avatar} // Force re-render when avatar changes
+        <div className="relative w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
+          {isSynced && currentUser ? (
+            <Avatar
+              user={{
+                avatar: currentUser.avatar,
+                avatarUrl: currentUser.avatar,
+                displayName: currentUser.displayName,
+                handle: currentUser.handle,
+                gender: currentUser.gender,
+                dateOfBirth: currentUser.dateOfBirth
+              }}
+              size="100%"
+              className="w-full h-full"
+              showBorder
             />
           ) : (
-            <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+            <div className="w-full h-full bg-gray-700 rounded-full flex items-center justify-center ring-2 ring-cyan-500/20">
               <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
@@ -203,7 +210,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
                     className="w-full aspect-video"
                   />
                 )}
-                
+
                 {/* Remove button */}
                 <button
                   onClick={removeMedia}
@@ -232,7 +239,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
                 className="mt-3 p-3 bg-gray-800/40 rounded-lg border border-white/[0.06] space-y-3"
               >
                 <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wide">Comment Settings</h4>
-                
+
                 {/* Disable Comments Toggle */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -245,9 +252,8 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
                       setCommentsDisabled(newValue);
                       setUserCommentPreferences({ commentsDisabled: newValue });
                     }}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${
-                      commentsDisabled ? 'bg-cyan-500' : 'bg-gray-700'
-                    }`}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${commentsDisabled ? 'bg-cyan-500' : 'bg-gray-700'
+                      }`}
                   >
                     <motion.div
                       animate={{ x: commentsDisabled ? 20 : 2 }}
@@ -256,7 +262,7 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
                     />
                   </button>
                 </div>
-                
+
                 {/* Followers Only Comments Toggle */}
                 {!commentsDisabled && (
                   <motion.div
@@ -282,9 +288,8 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
                             setFollowersOnlyComments(!newValue);
                           }
                         }}
-                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                          followersOnlyComments ? 'bg-cyan-500' : 'bg-gray-700'
-                        }`}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${followersOnlyComments ? 'bg-cyan-500' : 'bg-gray-700'
+                          }`}
                       >
                         <motion.div
                           animate={{ x: followersOnlyComments ? 20 : 2 }}
@@ -460,11 +465,10 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
               {/* Comment Settings button */}
               <button
                 onClick={() => setShowCommentSettings(!showCommentSettings)}
-                className={`w-8 h-8 flex items-center justify-center ${
-                  commentsDisabled || commentLimit 
-                    ? 'text-cyan-400 bg-cyan-500/20' 
-                    : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/10'
-                } rounded-lg transition-colors`}
+                className={`w-8 h-8 flex items-center justify-center ${commentsDisabled || commentLimit
+                  ? 'text-cyan-400 bg-cyan-500/20'
+                  : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/10'
+                  } rounded-lg transition-colors`}
                 aria-label="Comment settings"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -475,13 +479,12 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
 
               {/* Character counter */}
               <span
-                className={`text-xs ${
-                  remaining < 20
-                    ? remaining < 0
-                      ? 'text-red-400'
-                      : 'text-yellow-400'
-                    : 'text-gray-500'
-                }`}
+                className={`text-xs ${remaining < 20
+                  ? remaining < 0
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
+                  : 'text-gray-500'
+                  }`}
               >
                 {remaining < 50 && remaining}
               </span>
@@ -492,11 +495,10 @@ export const Composer: React.FC<ComposerProps> = ({ onPost, isMobile = false }) 
               whileTap={{ scale: 0.95 }}
               onClick={handlePost}
               disabled={!content.trim() || remaining < 0 || isMuted}
-              className={`px-5 py-2 rounded-lg font-medium text-sm transition-all ${
-                content.trim() && remaining >= 0 && !isMuted
-                  ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:shadow-lg hover:shadow-cyan-500/30'
-                  : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-              }`}
+              className={`px-5 py-2 rounded-lg font-medium text-sm transition-all ${content.trim() && remaining >= 0 && !isMuted
+                ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:shadow-lg hover:shadow-cyan-500/30'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                }`}
             >
               {isMuted ? 'Muted' : 'Post'}
             </motion.button>

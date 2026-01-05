@@ -114,6 +114,7 @@ func (h *UserHandlers) Update(w http.ResponseWriter, r *http.Request) {
 		Name                  *string `json:"name"`
 		Bio                   *string `json:"bio"`
 		Gender                *string `json:"gender"`
+		DateOfBirth           *string `json:"dateOfBirth"`
 		AvatarURL             *string `json:"avatarUrl"`
 		CoverPhotoURL         *string `json:"coverPhotoUrl"`
 		FollowersOnlyComments *bool   `json:"followersOnlyComments"`
@@ -135,6 +136,12 @@ func (h *UserHandlers) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if updates.Gender != nil {
 		user.Gender = *updates.Gender
+	}
+	if updates.DateOfBirth != nil && *updates.DateOfBirth != "" {
+		dob, err := time.Parse("2006-01-02", *updates.DateOfBirth)
+		if err == nil {
+			user.DateOfBirth = dob
+		}
 	}
 	if updates.AvatarURL != nil {
 		user.AvatarURL = *updates.AvatarURL

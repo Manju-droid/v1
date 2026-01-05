@@ -103,4 +103,17 @@ export const hashtagAPI = {
   unfollow: (slug: string): Promise<void> => {
     return apiClient.delete<void>(`/hashtags/${slug}/follow`);
   },
+
+  /**
+   * Get trending hashtags
+   */
+  getTrending: async (): Promise<{
+    trending_1h: Hashtag[];
+    trending_24h: Hashtag[];
+    trending_by_category_1h: Record<string, Hashtag[]>;
+    trending_by_category_24h: Record<string, Hashtag[]>;
+    popular_all_time: Hashtag[];
+  }> => {
+    return apiClient.get<any>('/hashtags/trending');
+  },
 };

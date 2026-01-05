@@ -13,6 +13,7 @@ import { renderTextWithHashtags } from '@/lib/text-utils';
 import { trackReachImpression, isDocumentVisible } from '@/lib/analytics';
 import { ReportButton } from './ReportButton';
 import { getAvatarUrl } from '@/lib/avatar';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface PostCardProps {
   post: Post;
@@ -340,18 +341,14 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onQuote, source = 'fee
             onClick={(e) => e.stopPropagation()}
             className="relative w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-cyan-500/20 hover:ring-cyan-500/40 transition-all cursor-pointer"
           >
-            {post.author.avatar ? (
-              <Image
-                src={post.author.avatar}
-                alt={post.author.displayName}
-                fill
-                className="object-cover"
+            <div className="relative w-10 h-10 md:w-12 md:h-12 flex-shrink-0 cursor-pointer">
+              <Avatar
+                user={post.author}
+                size="100%"
+                className="w-full h-full"
+                showBorder
               />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center text-white font-semibold text-lg">
-                {post.author.displayName?.[0]?.toUpperCase() || '?'}
-              </div>
-            )}
+            </div>
           </Link>
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2 flex-wrap">

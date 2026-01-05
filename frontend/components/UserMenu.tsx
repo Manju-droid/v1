@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getCurrentUserMock } from '@/lib/store';
 import { syncCurrentUser } from '@/lib/currentUser';
 import { logout } from '@/lib/auth';
+import { Avatar } from '@/components/ui/Avatar';
 
 export const UserMenu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,13 +48,11 @@ export const UserMenu: React.FC = () => {
         className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-cyan-500/20 hover:ring-cyan-500/40 transition-all bg-gray-800"
         aria-label="User menu"
       >
-        {isSynced && currentUser?.avatar ? (
-          <Image
-            src={currentUser.avatar}
-            alt={currentUser.displayName || 'User'}
-            fill
-            className="object-cover"
-            key={currentUser.avatar} // Force re-render when avatar changes
+        {isSynced && currentUser ? (
+          <Avatar
+            user={currentUser}
+            size="100%"
+            className="w-full h-full"
           />
         ) : (
           <div className="w-full h-full bg-gray-700 flex items-center justify-center">
@@ -76,10 +75,10 @@ export const UserMenu: React.FC = () => {
           >
             {/* User Info */}
             {currentUser && (
-            <div className="px-4 py-3 border-b border-white/[0.06]">
+              <div className="px-4 py-3 border-b border-white/[0.06]">
                 <p className="text-white font-semibold text-sm">{currentUser.displayName || 'User'}</p>
                 <p className="text-gray-400 text-xs">@{currentUser.handle || 'user'}</p>
-            </div>
+              </div>
             )}
 
             {/* Menu Items */}

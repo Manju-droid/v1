@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -127,6 +129,22 @@ func (h *PostHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.Create(post); err != nil {
 		Error(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Extract and link hashtags
+	// This simple regex matches hashtags. In production, consider a more robust parser or shared utility.
+	hashtagRegex := regexp.MustCompile(`#(\w+)`)
+	matches := hashtagRegex.FindAllStringSubmatch(req.Content, -1)
+	for _, match := range matches {
+		if len(match) > 1 {
+			slug := strings.ToLower(match[1])
+			// Find hashtag by slug
+			hashtag, err := h.hashtagRepo.GetBySlug(slug)
+			if err == nil {
+				// Link post to hashtag
+				_ = h.hashtagRepo.AddPostToHashtag(hashtag.ID, post.ID, false)
+			}
+		}
 	}
 
 	Created(w, post)

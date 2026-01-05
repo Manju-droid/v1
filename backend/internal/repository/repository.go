@@ -1,6 +1,10 @@
 package repository
 
-import "github.com/yourusername/v-backend/internal/models"
+import (
+	"time"
+
+	"github.com/yourusername/v-backend/internal/models"
+)
 
 // AuthRepository defines the interface for authentication data access
 type AuthRepository interface {
@@ -84,6 +88,9 @@ type HashtagRepository interface {
 	FollowHashtag(userID, hashtagID string) error
 	UnfollowHashtag(userID, hashtagID string) error
 	IsFollowing(userID, hashtagID string) (bool, error)
+	GetTrending(window time.Duration, limit int) ([]*models.Hashtag, error)
+	GetTrendingByCategory(window time.Duration, limit int) (map[string][]*models.Hashtag, error)
+	GetPopular(limit int) ([]*models.Hashtag, error)
 }
 
 // DebateRepository defines the interface for debate data access

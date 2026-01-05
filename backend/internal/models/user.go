@@ -19,6 +19,7 @@ type User struct {
 	Languages             []string `json:"languages"`
 	Bio                   string   `json:"bio"`
 	Gender                string   `json:"gender,omitempty"`
+	DateOfBirth           time.Time `json:"dateOfBirth,omitempty"`
 	AvatarURL             string   `json:"avatarUrl"`
 	CoverPhotoURL         string   `json:"coverPhotoUrl"`
 	FollowersOnlyComments bool     `json:"followersOnlyComments"`

@@ -73,6 +73,41 @@ func (h *AuthHandlers) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse Date of Birth
+	dob, err := time.Parse("2006-01-02", req.DateOfBirth)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "Invalid date of birth format (must be YYYY-MM-DD)")
+		return
+	}
+
+	// Calculate age and determine age group for avatar
+	// Calculate age and determine age group for avatar
+	age := int(time.Since(dob).Hours() / 24 / 365.25)
+
+	// Create avatar seed using gender (if provided) and age group
+	// This ensures age-appropriate avatar variation
+	// Determine avatar URL based on gender
+	avatarParams := ""
+	facialHairSet := false
+
+	if req.Gender == "male" {
+		// Use a short list of male hairstyles to avoid HTTP 400 (URL length limits)
+		avatarParams = "&top=shortCurly,shortFlat,shortRound,sides,theCaesar&facialHairProbability=40"
+		facialHairSet = true
+	} else if req.Gender == "female" {
+		// Use a short list of female hairstyles to avoid HTTP 400 (URL length limits)
+		avatarParams = "&top=longButNotTooLong,bob,curly,straight01,straight02&facialHairProbability=0"
+		facialHairSet = true
+	}
+
+	avatarURL := "https://api.dicebear.com/9.x/avataaars/svg?seed=" + req.Handle + "&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf" + avatarParams
+
+	// Age adjustments for avatar
+	// Note: Removed hairColor parameter as comma-separated values cause DiceBear API errors
+	if age < 13 && !facialHairSet {
+		avatarURL += "&facialHairProbability=0"
+	}
+
 	// Create user
 	userID := uuid.New().String()
 	user := &models.User{
@@ -83,7 +118,9 @@ func (h *AuthHandlers) Signup(w http.ResponseWriter, r *http.Request) {
 		PhoneNumber: req.PhoneNumber,
 		Languages:   []string{"English", req.Language},
 		Bio:         req.Bio,
-		AvatarURL:   "https://api.dicebear.com/7.x/avataaars/svg?seed=" + req.Handle,
+		Gender:      req.Gender,
+		DateOfBirth: dob,
+		AvatarURL:   avatarURL,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}

@@ -19,6 +19,7 @@ interface LocalHashtag {
   shouts: number;
   momentum: number; // boosts - shouts
   isTrending?: boolean;
+  category?: string; // New field
   createdBy?: string; // userId of the creator
 }
 
@@ -39,6 +40,7 @@ export default function LocalHashtagHubPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newLocalHashtagName, setNewLocalHashtagName] = useState('');
+  const [newLocalHashtagCategory, setNewLocalHashtagCategory] = useState('General');
   const [openMenuSlug, setOpenMenuSlug] = useState<string | null>(null);
 
   // WebSocket connection for real-time hashtag updates
@@ -69,6 +71,8 @@ export default function LocalHashtagHubPage() {
             boosts: item.boosts !== undefined ? item.boosts : (h.boosts || 0),
             shouts: item.shouts !== undefined ? item.shouts : (h.shouts || 0),
             momentum: item.momentum !== undefined ? item.momentum : ((item.boosts || 0) - (item.shouts || 0)),
+            itemCategory: h.category || 'General', // Store as temp to avoid conflict with interface if needed, or just category
+            category: h.category || 'General',
             isTrending: (h.posts || item.posts || 0) > 100,
             createdBy: h.createdBy,
           };
@@ -230,11 +234,12 @@ export default function LocalHashtagHubPage() {
         return;
       }
 
-      console.log('[Hashtag Create] Creating hashtag:', { name: cleanName, slug, createdBy: currentUser.id });
+      console.log('[Hashtag Create] Creating hashtag:', { name: cleanName, slug, category: newLocalHashtagCategory, createdBy: currentUser.id });
 
       const newHashtag = await hashtagAPI.create({
         name: cleanName,
         slug: slug,
+        category: newLocalHashtagCategory,
         createdBy: currentUser.id,
       });
 
@@ -244,6 +249,7 @@ export default function LocalHashtagHubPage() {
         const formattedHashtag: LocalHashtag = {
           slug: newHashtag.slug,
           name: newHashtag.name || cleanName, // Fallback to cleanName if backend doesn't return name
+          category: newHashtag.category || newLocalHashtagCategory,
           posts: 0,
           boosts: 0,
           shouts: 0,
@@ -256,6 +262,7 @@ export default function LocalHashtagHubPage() {
         setHashtags([formattedHashtag, ...hashtags]);
         setShowCreateModal(false);
         setNewLocalHashtagName('');
+        setNewLocalHashtagCategory('General');
         addToast('Hashtag created successfully!', 'success');
       } else {
         console.warn('[Hashtag Create] Invalid response:', newHashtag);
@@ -456,6 +463,9 @@ export default function LocalHashtagHubPage() {
                                 }`}>
                                 #{hashtag.name}
                               </span>
+                              <span className="ml-2 px-2 py-0.5 rounded-full bg-gray-700 text-xs text-gray-400 border border-gray-600">
+                                {hashtag.category || 'General'}
+                              </span>
                             </td>
                             <td className="px-6 py-4 text-center text-gray-300 tabular-nums font-medium w-24">{hashtag.posts}</td>
                             <td className="px-6 py-4 text-center text-gray-300 tabular-nums font-medium w-24">{hashtag.boosts}</td>
@@ -540,6 +550,9 @@ export default function LocalHashtagHubPage() {
                             }`}>
                             #{hashtag.name}
                           </span>
+                          <span className="ml-2 px-2 py-0.5 rounded-full bg-gray-700 text-xs text-gray-400 border border-gray-600">
+                            {hashtag.category || 'General'}
+                          </span>
                           {currentUser && hashtag.createdBy === currentUser.id && (
                             <div className="relative hashtag-menu" style={{ zIndex: 100 }}>
                               <button
@@ -611,6 +624,8 @@ export default function LocalHashtagHubPage() {
             onCreate={handleCreateLocalHashtag}
             hashtagName={newLocalHashtagName}
             setLocalHashtagName={setNewLocalHashtagName}
+            hashtagCategory={newLocalHashtagCategory}
+            setLocalHashtagCategory={setNewLocalHashtagCategory}
           />
         )}
       </AnimatePresence>
@@ -627,7 +642,11 @@ interface CreateLocalHashtagModalProps {
   onCreate: () => void;
   hashtagName: string;
   setLocalHashtagName: (name: string) => void;
+  hashtagCategory: string;
+  setLocalHashtagCategory: (category: string) => void;
 }
+
+const CATEGORIES = ['General', 'Technology', 'Entertainment', 'Politics', 'Sports', 'Education'];
 
 const CreateLocalHashtagModal: React.FC<CreateLocalHashtagModalProps> = ({
   isOpen,
@@ -635,6 +654,8 @@ const CreateLocalHashtagModal: React.FC<CreateLocalHashtagModalProps> = ({
   onCreate,
   hashtagName,
   setLocalHashtagName,
+  hashtagCategory,
+  setLocalHashtagCategory,
 }) => {
   return (
     <>
@@ -692,6 +713,30 @@ const CreateLocalHashtagModal: React.FC<CreateLocalHashtagModalProps> = ({
             <p className="mt-2 text-xs text-gray-500">
               The hashtag will be created as #{hashtagName || 'hashtag'}
             </p>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Category
+            </label>
+            <div className="relative">
+              <select
+                value={hashtagCategory}
+                onChange={(e) => setLocalHashtagCategory(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-800/50 border border-white/[0.08] rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 appearance-none cursor-pointer"
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat} className="bg-[#1F2937]">
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-3">
