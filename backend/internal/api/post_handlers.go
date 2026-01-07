@@ -26,9 +26,10 @@ type PostHandlers struct {
 	modService         *service.ModerationService
 	translationService *service.TranslationService
 	hashtagRepo        repository.HashtagRepository
+	communityRepo      repository.CommunityRepository
 }
 
-func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService, translationService *service.TranslationService, hashtagRepo repository.HashtagRepository) *PostHandlers {
+func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRepository, notifRepo repository.NotificationRepository, analyticsRepo repository.AnalyticsRepository, pointsService *service.PointsService, modService *service.ModerationService, translationService *service.TranslationService, hashtagRepo repository.HashtagRepository, communityRepo repository.CommunityRepository) *PostHandlers {
 	return &PostHandlers{
 		repo:               repo,
 		userRepo:           userRepo,
@@ -38,6 +39,7 @@ func NewPostHandlers(repo repository.PostRepository, userRepo repository.UserRep
 		modService:         modService,
 		translationService: translationService,
 		hashtagRepo:        hashtagRepo,
+		communityRepo:      communityRepo,
 	}
 }
 
@@ -50,6 +52,10 @@ func (h *PostHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		CommentsDisabled bool   `json:"commentsDisabled"`
 		CommentLimit     *int   `json:"commentLimit,omitempty"`
 		IsHashtagPost    bool   `json:"isHashtagPost"` // Indicates if post is in a hashtag
+		CommunityID      string `json:"communityId,omitempty"`
+		PostType         string `json:"postType,omitempty"`
+		TopicTag         string `json:"topicTag,omitempty"`
+		ResponseToPostID string `json:"responseToPostId,omitempty"` // ID of the post being replied to
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -89,6 +95,72 @@ func (h *PostHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	// Check for abusive content
 	isAbusive := service.IsAbusive(req.Content)
 
+	var communityID *string
+	var postType string
+	var topicTag string
+
+	// Community Posting Logic
+	if req.CommunityID != "" {
+		commID := req.CommunityID
+		communityID = &commID
+		postType = req.PostType
+		topicTag = req.TopicTag
+
+		// 1. Validate Community Exists
+		community, err := h.communityRepo.GetByID(req.CommunityID)
+		if err != nil {
+			Error(w, http.StatusNotFound, "Community not found")
+			return
+		}
+
+		// 2. Validate Membership (Optional strict check? UI should handle, but backend should enforce)
+		// For now, let's assume if they can post, they are members or we check logic.
+		// "Block posting if ... doesn't belong to that category"
+
+		// 3. Validate Post Type
+		validTypes := map[string]bool{
+			"Question":     true,
+			"Discussion":   true,
+			"Resource":     true,
+			"Announcement": true,
+		}
+		if !validTypes[req.PostType] {
+			Error(w, http.StatusBadRequest, "Invalid Post Type. Must be Question, Discussion, Resource, or Announcement")
+			return
+		}
+
+		// 4. Validate Topic Tag based on Category
+		// Maps Category -> Allowed Tags
+		// defined inline for now, ideally in models or service
+		allowedTags := map[models.CommunityCategory][]string{
+			models.CategoryPolitics:      {"Elections", "Policy", "Geopolitics"},
+			models.CategoryEntertainment: {"Movies", "Music", "Celebrities"},
+			models.CategoryTechnology:    {"AI", "Coding", "Gadgets"}, // Example tags
+			models.CategorySports:        {"Match", "Transfer", "Discussion"},
+			models.CategoryEducation:     {"Study", "Career", "Research"},
+			models.CategoryGeneral:       {"Life", "Advice", "OffMyChest"},
+		}
+
+		tags, ok := allowedTags[community.Category]
+		if !ok {
+			// Fallback or error?
+			tags = []string{"General"}
+		}
+
+		isValidTag := false
+		for _, t := range tags {
+			if t == req.TopicTag {
+				isValidTag = true
+				break
+			}
+		}
+
+		if !isValidTag {
+			Error(w, http.StatusBadRequest, fmt.Sprintf("Invalid Topic Tag for %s category. Allowed: %v", community.Category, tags))
+			return
+		}
+	}
+
 	post := &models.Post{
 		ID:                uuid.New().String(),
 		AuthorID:          req.AuthorID,
@@ -102,6 +174,10 @@ func (h *PostHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		InModerationQueue: false,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
+		CommunityID:       communityID,
+		PostType:          postType,
+		TopicTag:          topicTag,
+		ResponseToPostID:  req.ResponseToPostID,
 	}
 
 	if isAbusive {
@@ -166,6 +242,7 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	authorID := r.URL.Query().Get("authorId")
+	communityID := r.URL.Query().Get("communityId")
 
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -179,6 +256,8 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 
 	if authorID != "" {
 		posts, err = h.repo.ListByAuthor(authorID, limit, offset)
+	} else if communityID != "" {
+		posts, err = h.repo.ListByCommunity(communityID, limit, offset)
 	} else {
 		posts, err = h.repo.List(limit, offset)
 	}
@@ -222,6 +301,28 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 			saved, _ = h.repo.IsSaved(currentUserID, post.ID)
 		}
 
+		// Enrich ResponseToPost if present
+		var responseToPost map[string]interface{}
+		if post.ResponseToPostID != "" {
+			if originalPost, err := h.repo.GetByID(post.ResponseToPostID); err == nil {
+				// Get original author
+				if origAuthor, err := h.userRepo.GetByID(originalPost.AuthorID); err == nil {
+					responseToPost = map[string]interface{}{
+						"id":       originalPost.ID,
+						"content":  originalPost.Content,
+						"authorId": originalPost.AuthorID,
+						"author": map[string]interface{}{
+							"id":          origAuthor.ID,
+							"name":        origAuthor.Name,
+							"displayName": origAuthor.Name,
+							"handle":      origAuthor.Handle,
+							"avatar":      origAuthor.AvatarURL,
+						},
+					}
+				}
+			}
+		}
+
 		enrichedPosts = append(enrichedPosts, map[string]interface{}{
 			"id":       post.ID,
 			"authorId": post.AuthorID,
@@ -250,6 +351,8 @@ func (h *PostHandlers) List(w http.ResponseWriter, r *http.Request) {
 			"updatedAt":         post.UpdatedAt,
 			"reacted":           reacted,
 			"saved":             saved,
+			"responseToPostId":  post.ResponseToPostID,
+			"responseToPost":    responseToPost,
 		})
 	}
 

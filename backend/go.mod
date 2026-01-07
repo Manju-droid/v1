@@ -10,7 +10,11 @@ require (
 	golang.org/x/crypto v0.45.0
 )
 
-require github.com/gorilla/websocket v1.5.3
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/joho/godotenv v1.5.1
+	github.com/livekit/protocol v1.43.4
+)
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.6-20250625184727-c923a0c2a132.1 // indirect
@@ -28,13 +32,11 @@ require (
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/google/cel-go v0.25.0 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/lithammer/shortuuid/v4 v4.2.0 // indirect
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 // indirect
-	github.com/livekit/protocol v1.43.4 // indirect
 	github.com/livekit/psrpc v0.7.1 // indirect
 	github.com/nats-io/nats.go v1.43.0 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect

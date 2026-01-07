@@ -19,6 +19,7 @@ const (
 	ActionDailyStreak       PointsAction = "DAILY_STREAK"
 	ActionDeletePost        PointsAction = "DELETE_POST"
 	ActionDeleteHashtagPost PointsAction = "DELETE_HASHTAG_POST"
+	ActionCommunityJoin     PointsAction = "COMMUNITY_JOIN"
 )
 
 type PointsService struct {
@@ -111,6 +112,13 @@ func (s *PointsService) UpdateUserPoints(userID string, actionType PointsAction)
 
 	case ActionDeleteHashtagPost:
 		pointsDelta = -3
+
+	case ActionCommunityJoin:
+		// Logic to ensure one-time points is handled by the caller/service layer
+		// checking if they were already a member.
+		// Detailed check will happen in CommunityService/Handler.
+		// Here we just define the points value.
+		pointsDelta = 20
 
 	default:
 		return errors.New("invalid action type")

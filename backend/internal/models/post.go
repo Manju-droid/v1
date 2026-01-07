@@ -25,6 +25,13 @@ type Post struct {
 	Reach24h         int    `json:"reach_24h"`
 	ReachAll         int    `json:"reach_all"`
 
+	// Community fields
+	CommunityID      *string `json:"communityId,omitempty"`
+	PostType         string  `json:"postType,omitempty"` // Question, Discussion, Resource, Announcement
+	TopicTag         string  `json:"topicTag,omitempty"`
+	ResponseToPostID string  `json:"responseToPostId,omitempty"` // ID of the post being responded to
+	ResponseToPost   *Post   `json:"responseToPost,omitempty"`   // The actual post being responded to (enriched)
+
 	// Moderation fields
 	Status            PostStatus `json:"status"`            // VISIBLE, ABUSIVE_FLAG, TEMP_HIDDEN, REMOVED
 	ReportCount       int        `json:"reportCount"`       // Number of reports

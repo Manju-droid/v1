@@ -226,10 +226,14 @@ func NewServer(cfg *config.Config) *Server {
 	hub := service.NewHub()
 	go hub.Run()
 
+	// Initialize Community components
+	communityRepo := memory.NewCommunityMemoryRepository()
+	communityHandlers := api.NewCommunityHandlers(communityRepo, userRepo, pointsService)
+
 	// Initialize handlers
 	authHandlers := api.NewAuthHandlers(authRepo, userRepo, pointsService, notifRepo)
 	userHandlers := api.NewUserHandlers(userRepo)
-	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService, hashtagRepo)
+	postHandlers := api.NewPostHandlers(postRepo, userRepo, notifRepo, analyticsRepo, pointsService, moderationService, translationService, hashtagRepo, communityRepo)
 	messageHandlers := api.NewMessageHandlers(messageRepo)
 	hashtagHandlers := api.NewHashtagHandlers(hashtagRepo, userRepo, postRepo, hub)
 	debateHandlers := api.NewDebateHandlers(debateRepo, userRepo, pointsService, hub)
@@ -445,6 +449,22 @@ func NewServer(cfg *config.Config) *Server {
 
 		// LiveKit token route
 		r.Get("/livekit-token", livekitHandlers.GetToken)
+
+		// Community routes
+		r.Route("/communities", func(r chi.Router) {
+			r.Get("/", communityHandlers.List)
+			r.Get("/{id}", communityHandlers.Get)
+			r.Get("/{id}/members", communityHandlers.GetMembers)
+			r.Get("/{id}/members/{userId}", communityHandlers.GetMember) // Check membership
+
+			// Protected routes
+			r.Group(func(r chi.Router) {
+				r.Use(api.RequireAuth)
+				r.Post("/", communityHandlers.Create)
+				r.Post("/{id}/join", communityHandlers.Join)
+				r.Post("/{id}/leave", communityHandlers.Leave)
+			})
+		})
 	})
 
 	return &Server{router: r}

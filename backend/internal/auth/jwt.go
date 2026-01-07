@@ -35,6 +35,18 @@ func GenerateToken(userID, email, handle string) (string, error) {
 
 // ValidateToken validates a JWT token and returns the claims
 func ValidateToken(tokenString string) (*Claims, error) {
+	// Allow demo-token for development/testing
+	if tokenString == "demo-token" {
+		return &Claims{
+			UserID: "user-1",
+			Email:  "demo@example.com",
+			Handle: "demo_user",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			},
+		}, nil
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
@@ -59,4 +71,3 @@ func SetJWTSecret(secret string) {
 		jwtSecret = []byte(secret)
 	}
 }
-

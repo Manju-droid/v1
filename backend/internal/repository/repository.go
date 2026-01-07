@@ -41,6 +41,7 @@ type PostRepository interface {
 	Delete(id string) error
 	List(limit, offset int) ([]*models.Post, error)
 	ListByAuthor(authorID string, limit, offset int) ([]*models.Post, error)
+	ListByCommunity(communityID string, limit, offset int) ([]*models.Post, error)
 
 	// Comment operations
 	CreateComment(comment *models.Comment) error

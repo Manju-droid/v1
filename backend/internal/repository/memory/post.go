@@ -11,7 +11,7 @@ import (
 type PostMemoryRepository struct {
 	posts     map[string]*models.Post
 	comments  map[string]*models.Comment
-	reactions map[string]*models.Reaction // key: userID-postID or userID-postID-commentID
+	reactions map[string]*models.Reaction     // key: userID-postID or userID-postID-commentID
 	saves     map[string]map[string]time.Time // userID -> map[postID]timestamp
 	mu        sync.RWMutex
 }
@@ -35,7 +35,7 @@ func (r *PostMemoryRepository) Create(post *models.Post) error {
 
 	post.CreatedAt = time.Now()
 	post.UpdatedAt = time.Now()
-	
+
 	// Initialize moderation fields if not set
 	if post.Status == "" {
 		post.Status = models.PostStatusVisible
@@ -44,7 +44,7 @@ func (r *PostMemoryRepository) Create(post *models.Post) error {
 		post.ReportCount = 0
 	}
 	post.InModerationQueue = false
-	
+
 	r.posts[post.ID] = post
 	return nil
 }
@@ -137,6 +137,33 @@ func (r *PostMemoryRepository) ListByAuthor(authorID string, limit, offset int) 
 	posts := make([]*models.Post, 0)
 	for _, post := range r.posts {
 		if post.AuthorID == authorID {
+			// Filter out TEMP_HIDDEN and REMOVED posts from feed
+			if post.Status != models.PostStatusTempHidden && post.Status != models.PostStatusRemoved {
+				posts = append(posts, post)
+			}
+		}
+	}
+
+	start := offset
+	if start > len(posts) {
+		return []*models.Post{}, nil
+	}
+
+	end := start + limit
+	if end > len(posts) {
+		end = len(posts)
+	}
+
+	return posts[start:end], nil
+}
+
+func (r *PostMemoryRepository) ListByCommunity(communityID string, limit, offset int) ([]*models.Post, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	posts := make([]*models.Post, 0)
+	for _, post := range r.posts {
+		if post.CommunityID != nil && *post.CommunityID == communityID {
 			// Filter out TEMP_HIDDEN and REMOVED posts from feed
 			if post.Status != models.PostStatusTempHidden && post.Status != models.PostStatusRemoved {
 				posts = append(posts, post)
@@ -358,4 +385,3 @@ func (r *PostMemoryRepository) IsSaved(userID, postID string) (bool, error) {
 	_, exists := r.saves[userID][postID]
 	return exists, nil
 }
-
