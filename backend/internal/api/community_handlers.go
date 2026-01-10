@@ -238,8 +238,14 @@ func (h *CommunityHandlers) GetMembers(w http.ResponseWriter, r *http.Request) {
 
 		user, err := h.userRepo.GetByID(m.UserID)
 		if err != nil {
-			fmt.Printf("DEBUG: Skipping member %s - User not found in repo\n", m.UserID)
-			continue // Skip if user not found (shouldn't happen)
+			fmt.Printf("DEBUG: Member %s - User not found in repo, using placeholder\n", m.UserID)
+			// fallback for deleted/missing users (common in dev with memory repo)
+			user = &models.User{
+				ID:        m.UserID,
+				Name:      "Unknown User",
+				Handle:    "unknown_user",
+				AvatarURL: "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y",
+			}
 		}
 
 		enrichedMembers = append(enrichedMembers, EnrichedMember{

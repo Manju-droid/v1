@@ -2,6 +2,7 @@ package memory
 
 import (
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -115,8 +116,9 @@ func (r *PostMemoryRepository) List(limit, offset int) ([]*models.Post, error) {
 	}
 
 	// Sort by created date (newest first)
-	// In production, you'd use a proper sorting algorithm
-	// For now, just return as-is
+	sort.Slice(posts, func(i, j int) bool {
+		return posts[i].CreatedAt.After(posts[j].CreatedAt)
+	})
 
 	start := offset
 	if start > len(posts) {
@@ -145,6 +147,11 @@ func (r *PostMemoryRepository) ListByAuthor(authorID string, limit, offset int) 
 		}
 	}
 
+	// Sort by created date (newest first)
+	sort.Slice(posts, func(i, j int) bool {
+		return posts[i].CreatedAt.After(posts[j].CreatedAt)
+	})
+
 	start := offset
 	if start > len(posts) {
 		return []*models.Post{}, nil
@@ -171,6 +178,11 @@ func (r *PostMemoryRepository) ListByCommunity(communityID string, limit, offset
 			}
 		}
 	}
+
+	// Sort by created date (newest first)
+	sort.Slice(posts, func(i, j int) bool {
+		return posts[i].CreatedAt.After(posts[j].CreatedAt)
+	})
 
 	start := offset
 	if start > len(posts) {

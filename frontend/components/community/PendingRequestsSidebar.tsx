@@ -8,9 +8,10 @@ import { useStore } from '@/lib/store';
 
 interface PendingRequestsSidebarProps {
     communityId: string;
+    variant?: 'sidebar' | 'inline';
 }
 
-export const PendingRequestsSidebar: React.FC<PendingRequestsSidebarProps> = ({ communityId }) => {
+export const PendingRequestsSidebar: React.FC<PendingRequestsSidebarProps> = ({ communityId, variant = 'sidebar' }) => {
     const [pendingMembers, setPendingMembers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -28,10 +29,13 @@ export const PendingRequestsSidebar: React.FC<PendingRequestsSidebarProps> = ({ 
             const res = await fetch(`http://localhost:8080/api/communities/${communityId}/members?status=pending`);
             console.log('Fetch response status:', res.status);
             if (res.ok) {
-                const data = await res.json();
-                console.log('Pending members data:', data);
-                // data will be []EnrichedMember { CommunityMember, User }
-                setPendingMembers(Array.isArray(data) ? data : []);
+                const responseData = await res.json();
+                console.log('Pending members data:', responseData);
+                // Handle different response structures:
+                // 1. Direct array: [Member, Member]
+                // 2. Wrapped data: { data: [Member, Member] }
+                const members = Array.isArray(responseData) ? responseData : (responseData.data || []);
+                setPendingMembers(Array.isArray(members) ? members : []);
             }
         } catch (err) {
             console.error('Failed to fetch pending members:', err);
@@ -97,16 +101,23 @@ export const PendingRequestsSidebar: React.FC<PendingRequestsSidebarProps> = ({ 
         }
     };
 
+    const containerClasses = variant === 'sidebar'
+        ? "hidden xl:block w-[380px] h-full fixed right-0 top-16 overflow-y-auto py-6 px-4 space-y-6"
+        : "w-full mb-6 space-y-4"; // Inline style
+
     if (loading) {
         return (
-            <aside className="hidden xl:block w-[340px] h-full fixed right-0 top-16 overflow-y-auto py-6 px-4 space-y-6">
+            <aside className={containerClasses}>
                 <div className="bg-gray-900/60 backdrop-blur-sm border border-white/[0.06] rounded-2xl p-5 h-64 animate-pulse" />
             </aside>
         );
     }
 
+    // Don't render inline if empty? Optional.
+    // User might want to see "No requests" to know state.
+
     return (
-        <aside className="hidden xl:block w-[340px] h-full fixed right-0 top-16 overflow-y-auto py-6 px-4 space-y-6">
+        <aside className={containerClasses}>
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -117,7 +128,7 @@ export const PendingRequestsSidebar: React.FC<PendingRequestsSidebarProps> = ({ 
                     <span className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full">{pendingMembers.length}</span>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
                     {pendingMembers.length === 0 ? (
                         <div className="text-center py-8">
                             <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-500">

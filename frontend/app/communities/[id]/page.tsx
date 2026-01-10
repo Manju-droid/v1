@@ -30,7 +30,9 @@ interface Community {
 interface Post {
     id: string;
     content: string;
+    authorId: string;
     author: {
+        id: string;
         name: string;
         handle: string;
         avatarUrl: string;
@@ -48,6 +50,26 @@ interface Post {
     reacted?: boolean; // For like state
     saved?: boolean;
 }
+
+// Tracking component for view impressions
+const TrackVisibility = ({ postId, onVisible }: { postId: string, onVisible: () => void }) => {
+    const ref = useCallback((node: HTMLDivElement | null) => {
+        if (!node) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    onVisible();
+                    observer.disconnect();
+                }
+            },
+            { threshold: 0.5 }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [onVisible]);
+
+    return <div ref={ref} className="absolute inset-0 pointer-events-none" />;
+};
 
 export default function CommunityFeedPage() {
     const { id } = useParams();
@@ -111,6 +133,27 @@ export default function CommunityFeedPage() {
         navigator.clipboard.writeText(url);
         addToast('Link copied to clipboard', 'success');
     };
+
+    const recordImpression = useCallback(async (postId: string) => {
+        try {
+            const token = getCookie('v_auth') || localStorage.getItem('auth_token');
+            if (!token || !currentUser) return;
+
+            await fetch('http://localhost:8080/api/analytics/impression', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    postId,
+                    userId: currentUser.id
+                })
+            });
+        } catch (err) {
+            console.error('Failed to record impression', err);
+        }
+    }, [currentUser]);
 
     const [notFound, setNotFound] = useState(false);
 
@@ -196,8 +239,12 @@ export default function CommunityFeedPage() {
             });
             if (res.ok) {
                 const response = await res.json();
-                // PostHandlers.List returns { posts: [...] }. Wrapped -> { data: { posts: [...] } }
-                setPosts(response.data?.posts || []);
+                const fetchedPosts = response.data?.posts || [];
+                // Client-side sort to ensure stability (newest first)
+                fetchedPosts.sort((a: Post, b: Post) =>
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+                setPosts(fetchedPosts);
             }
         } catch (err) {
             console.error(err);
@@ -230,6 +277,47 @@ export default function CommunityFeedPage() {
             if (id) setMembershipLoading(false);
         }
     }, [id, currentUser, checkMembership]);
+
+    // Poll for new posts every 3 seconds
+    useEffect(() => {
+        if (!id) return;
+
+        const pollInterval = setInterval(() => {
+            // Don't set loading state for background updates to avoid UI flickering
+            if (!document.hidden) {
+                fetchPosts();
+            }
+        }, 3000);
+
+        return () => clearInterval(pollInterval);
+    }, [id, fetchPosts]);
+
+    const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
+
+    const handleDeletePost = async (postId: string) => {
+        if (!confirm('Are you sure you want to delete this post?')) return;
+
+        try {
+            const token = getCookie('v_auth') || localStorage.getItem('auth_token');
+            const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (res.ok) {
+                addToast('Post deleted successfully', 'success');
+                setPosts(prev => prev.filter(p => p.id !== postId));
+                if (openMenuPostId === postId) setOpenMenuPostId(null);
+            } else {
+                addToast('Failed to delete post', 'error');
+            }
+        } catch (err) {
+            console.error('Error deleting post:', err);
+            addToast('Error deleting post', 'error');
+        }
+    };
 
     const handleJoinCommunity = async () => {
         if (!currentUser) {
@@ -352,11 +440,9 @@ export default function CommunityFeedPage() {
             }
 
             // Refresh posts
+            // Refresh posts and community stats
             await Promise.all([
-                // Re-fetch posts to see new one
-                fetch(`http://localhost:8080/api/posts?communityId=${community.id}`)
-                    .then(r => r.json())
-                    .then(data => setPosts(data.data?.posts || [])),
+                fetchPosts(),
                 // Refresh community stats
                 fetch(`http://localhost:8080/api/communities/${id}`)
                     .then(r => r.json())
@@ -415,59 +501,77 @@ export default function CommunityFeedPage() {
 
                 <main className="lg:ml-[72px] xl:mr-[340px] min-h-screen pt-16">
                     <div className="max-w-[900px] mx-auto px-4 py-6 pb-24 lg:pb-6">
+                        {/* Back to Communities Navigation */}
+                        <div className="mb-4">
+                            <Link
+                                href="/communities"
+                                className="inline-flex items-center text-sm text-gray-400 hover:text-cyan-400 transition-colors group"
+                            >
+                                <svg
+                                    className="w-4 h-4 mr-1 transform group-hover:-translate-x-1 transition-transform"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                                Back to Communities
+                            </Link>
+                        </div>
+
                         {/* Banner */}
-                        <div className="h-48 rounded-xl overflow-hidden relative mb-6 border border-white/5">
+                        <div className="h-48 rounded-xl overflow-hidden relative mb-6 border border-white/5 group">
                             <img
                                 src={community.imageUrl || "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=2070&auto=format&fit=crop"}
                                 alt={community.name}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent">
-                                <div className="absolute bottom-0 left-0 p-6 w-full">
-                                    <h1 className="text-3xl font-bold text-white mb-1">{community.name}</h1>
-                                    <p className="text-gray-300 text-sm mb-2">{community.description}</p>
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded">{community.category}</span>
-                                        <span className="text-sm text-gray-400 font-medium">{community.memberCount} Members</span>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-6">
+                                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <h1 className="text-2xl md:text-3xl font-bold text-white mb-1 truncate">{community.name}</h1>
+                                        <p className="text-gray-300 text-sm mb-2 line-clamp-2 md:line-clamp-1">{community.description}</p>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded">{community.category}</span>
+                                            <span className="text-sm text-gray-400 font-medium">{community.memberCount} Members</span>
+                                        </div>
                                     </div>
 
-
-                                </div>
-                                <div className="absolute bottom-6 right-6">
-                                    {membershipLoading ? (
-                                        <div className="px-6 py-2 bg-transparent">
-                                            {/* Invisible placeholder or spinner */}
-                                            <div className="w-6 h-6 animate-spin rounded-full border-2 border-white/20 border-t-cyan-500 mx-auto"></div>
-                                        </div>
-                                    ) : isMember ? (
-                                        <button
-                                            className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-semibold transition-all border border-white/10 backdrop-blur-sm"
-                                        >
-                                            Joined
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={handleJoinCommunity}
-                                            disabled={joinLoading || isPending}
-                                            className={`px-6 py-2 rounded-full font-semibold transition-all shadow-lg shadow-cyan-500/20 flex items-center gap-2 ${isPending
-                                                ? 'bg-gray-600 text-gray-300 cursor-not-allowed border border-gray-500'
-                                                : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white'
-                                                }`}
-                                        >
-                                            {joinLoading ? (
-                                                <>Joining...</>
-                                            ) : isPending ? (
-                                                <>
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    Request Sent
-                                                </>
-                                            ) : (
-                                                'Join Community'
-                                            )}
-                                        </button>
-                                    )}
+                                    <div className="shrink-0">
+                                        {membershipLoading ? (
+                                            <div className="px-6 py-2 bg-transparent">
+                                                <div className="w-6 h-6 animate-spin rounded-full border-2 border-white/20 border-t-cyan-500 mx-auto"></div>
+                                            </div>
+                                        ) : isMember ? (
+                                            <button
+                                                className="w-full md:w-auto px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-semibold transition-all border border-white/10 backdrop-blur-sm"
+                                            >
+                                                Joined
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={handleJoinCommunity}
+                                                disabled={joinLoading || isPending}
+                                                className={`w-full md:w-auto px-6 py-2 rounded-full font-semibold transition-all shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 ${isPending
+                                                    ? 'bg-gray-600 text-gray-300 cursor-not-allowed border border-gray-500'
+                                                    : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white'
+                                                    }`}
+                                            >
+                                                {joinLoading ? (
+                                                    <>Joining...</>
+                                                ) : isPending ? (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        Request Sent
+                                                    </>
+                                                ) : (
+                                                    'Join Community'
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -475,6 +579,14 @@ export default function CommunityFeedPage() {
                         <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                             {/* Main Feed */}
                             <div className="space-y-6">
+
+                                {/* Mobile Pending Requests (Admin Only) */}
+                                {currentUser?.id === community.creatorId && (
+                                    <div className="xl:hidden">
+                                        <PendingRequestsSidebar communityId={id as string} variant="inline" />
+                                    </div>
+                                )}
+
                                 {/* Post Composer - Only if member */}
                                 {isMember ? (
                                     <div className="bg-gray-900/40 rounded-xl p-4 border border-white/5 backdrop-blur-sm">
@@ -545,7 +657,8 @@ export default function CommunityFeedPage() {
                                         </div>
                                     ) : (
                                         posts.map(post => (
-                                            <div key={post.id} className="bg-[#1F2937] border border-white/[0.08] rounded-xl p-4 sm:p-6 mb-4">
+                                            <div key={post.id} className="relative bg-[#1F2937] border border-white/[0.08] rounded-xl p-4 sm:p-6 mb-4">
+                                                <TrackVisibility postId={post.id} onVisible={() => recordImpression(post.id)} />
                                                 {/* Response Context */}
                                                 {post.responseToPostId && post.responseToPost && (
                                                     <div className="mb-4 pl-4 border-l-2 border-cyan-500/50">
@@ -561,18 +674,22 @@ export default function CommunityFeedPage() {
                                                 {/* Author Header */}
                                                 <div className="flex items-start justify-between mb-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg overflow-hidden">
-                                                            {post.author.avatarUrl ? (
-                                                                <img src={post.author.avatarUrl} alt={post.author.displayName} className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                post.author.displayName[0]
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-semibold text-gray-100">{post.author.displayName}</span>
-                                                                <span className="text-gray-500 text-sm">@{post.author.handle}</span>
+                                                        <Link href={`/u/${post.author.handle}`} className="shrink-0 hover:opacity-80 transition-opacity">
+                                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg overflow-hidden">
+                                                                {post.author.avatarUrl ? (
+                                                                    <img src={post.author.avatarUrl} alt={post.author.displayName} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    post.author.displayName[0]
+                                                                )}
                                                             </div>
+                                                        </Link>
+                                                        <div>
+                                                            <Link href={`/u/${post.author.handle}`} className="group">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-semibold text-gray-100 group-hover:underline decoration-cyan-500/50">{post.author.displayName}</span>
+                                                                    <span className="text-gray-500 text-sm">@{post.author.handle}</span>
+                                                                </div>
+                                                            </Link>
                                                             <div className="flex items-center gap-2 text-xs text-gray-400">
                                                                 <span>{new Date(post.createdAt).toLocaleDateString()}</span>
                                                                 {post.topicTag && (
@@ -586,6 +703,35 @@ export default function CommunityFeedPage() {
                                                             </div>
                                                         </div>
                                                     </div>
+
+                                                    {/* Post Actions Menu (Author Only) */}
+                                                    {currentUser?.id === post.authorId && (
+                                                        <div className="relative">
+                                                            <button
+                                                                onClick={() => setOpenMenuPostId(openMenuPostId === post.id ? null : post.id)}
+                                                                className="text-gray-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                                                </svg>
+                                                            </button>
+
+                                                            {/* Dropdown Menu */}
+                                                            {openMenuPostId === post.id && (
+                                                                <div className="absolute right-0 mt-2 w-32 bg-[#1F2937] border border-white/10 rounded-lg shadow-xl z-10 overflow-hidden">
+                                                                    <button
+                                                                        onClick={() => handleDeletePost(post.id)}
+                                                                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                        </svg>
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Post Content */}
