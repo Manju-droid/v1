@@ -8,6 +8,9 @@ import { MobileNav } from '@/components/feed/MobileNav';
 import { FeedHeader } from '@/components/feed/FeedHeader';
 import { RightSidebar } from '@/components/feed/RightSidebar';
 
+import { useStore } from '@/lib/store';
+import { useRouter } from 'next/navigation';
+
 interface Community {
   id: string;
   name: string;
@@ -16,6 +19,7 @@ interface Community {
   imageUrl: string;
   memberCount: number;
   postCount: number;
+  creatorId: string;
 }
 
 const CATEGORIES = [
@@ -33,6 +37,7 @@ export default function CommunitiesPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const { currentUser } = useStore();
 
   useEffect(() => {
     fetch('http://localhost:8080/api/communities')
@@ -46,6 +51,10 @@ export default function CommunitiesPage() {
         setLoading(false);
       });
   }, []);
+
+  const handleCommunityDeleted = (id: string) => {
+    setCommunities(prev => prev.filter(c => c.id !== id));
+  };
 
   // Filter and group communities
   const { groupedCommunities, flatCommunities } = useMemo(() => {
@@ -117,8 +126,8 @@ export default function CommunitiesPage() {
                   key={category}
                   onClick={() => setActiveCategory(category)}
                   className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${activeCategory === category
-                      ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
-                      : 'bg-gray-900/60 text-gray-400 hover:text-white hover:bg-gray-800 border border-white/5'
+                    ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                    : 'bg-gray-900/60 text-gray-400 hover:text-white hover:bg-gray-800 border border-white/5'
                     }`}
                 >
                   {category}
@@ -152,7 +161,12 @@ export default function CommunitiesPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                       {items.map((community) => (
-                        <CommunityCard key={community.id} community={community} />
+                        <CommunityCard
+                          key={community.id}
+                          community={community}
+                          currentUser={currentUser}
+                          onDelete={handleCommunityDeleted}
+                        />
                       ))}
                     </div>
                   </div>
@@ -160,7 +174,12 @@ export default function CommunitiesPage() {
                   /* Render Single Gird if a specific category is selected */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {flatCommunities.map((community) => (
-                      <CommunityCard key={community.id} community={community} />
+                      <CommunityCard
+                        key={community.id}
+                        community={community}
+                        currentUser={currentUser}
+                        onDelete={handleCommunityDeleted}
+                      />
                     ))}
                   </div>
                 )}
@@ -176,48 +195,176 @@ export default function CommunitiesPage() {
   );
 }
 
-function CommunityCard({ community }: { community: Community }) {
+function CommunityCard({ community, currentUser, onDelete }: { community: Community; currentUser: any; onDelete: (id: string) => void }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const getCookie = (name: string) => {
+    if (typeof document === 'undefined') return null;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+    return null;
+  };
+
+  const onMenuDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowMenu(false);
+    setShowConfirm(true);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowConfirm(false);
+  };
+
+  const handleConfirmDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDeleting(true);
+
+    try {
+      const token = getCookie('v_auth') || localStorage.getItem('auth_token');
+      const res = await fetch(`http://localhost:8080/api/communities/${community.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        onDelete(community.id);
+      } else {
+        const errorText = await res.text();
+        alert(`Failed to delete: ${errorText}`);
+        setIsDeleting(false);
+        setShowConfirm(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred.');
+      setIsDeleting(false);
+      setShowConfirm(false);
+    }
+  };
+
   return (
-    <Link
-      href={`/communities/${community.id}`}
-      className="block bg-gray-900/40 rounded-xl overflow-hidden border border-white/5 hover:border-cyan-500/50 transition-all hover:shadow-lg hover:shadow-cyan-500/10 group"
-    >
-      <div className="h-32 bg-gray-800 relative group-hover:opacity-90 transition-opacity">
-        {community.imageUrl ? (
-          <img
-            src={community.imageUrl}
-            alt={community.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800/50 text-gray-600">
-            <svg className="w-12 h-12 opacity-20" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+    <div className="block bg-gray-900/40 rounded-xl overflow-hidden border border-white/5 hover:border-cyan-500/50 transition-all hover:shadow-lg hover:shadow-cyan-500/10 group relative h-[250px]">
+      <Link href={`/communities/${community.id}`} className="block h-full flex flex-col">
+        <div className="h-32 bg-gray-800 relative group-hover:opacity-90 transition-opacity shrink-0">
+          {community.imageUrl ? (
+            <img
+              src={community.imageUrl}
+              alt={community.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-800/50 text-gray-600">
+              <svg className="w-12 h-12 opacity-20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          )}
+        </div>
+        <div className="p-4 flex-1 flex flex-col justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white mb-1 group-hover:text-cyan-400 transition-colors line-clamp-1">
+              {community.name}
+            </h3>
+            <p className="text-sm text-gray-400 line-clamp-2 h-10">
+              {community.description}
+            </p>
           </div>
-        )}
-        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-medium border border-white/10">
+          <div className="flex justify-between text-xs text-gray-500 border-t border-white/5 pt-3 mt-2">
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              {community.memberCount}
+            </span>
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
+              {community.postCount}
+            </span>
+          </div>
+        </div>
+      </Link>
+
+      {/* Floating Elements (Category & Menu) - Outside Link */}
+      <div className="absolute top-2 right-2 flex gap-2 pointer-events-none">
+        <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-medium border border-white/10 pointer-events-auto">
           {community.category}
         </div>
+
+        {/* 3 Dots Menu - Only for creator */}
+        {currentUser?.id === community.creatorId && !showConfirm && (
+          <div className="relative z-10 pointer-events-auto">
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              className="bg-black/60 backdrop-blur-sm p-1 rounded text-white/70 hover:text-white border border-white/10 hover:bg-black/80 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+              </svg>
+            </button>
+            {showMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowMenu(false);
+                  }}
+                />
+                <div className="absolute right-0 mt-2 w-32 bg-[#1C2128] border border-white/10 rounded-lg shadow-xl z-20 overflow-hidden">
+                  <button
+                    onClick={onMenuDeleteClick}
+                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
-      <div className="p-4">
-        <h3 className="text-lg font-bold text-white mb-1 group-hover:text-cyan-400 transition-colors">
-          {community.name}
-        </h3>
-        <p className="text-sm text-gray-400 line-clamp-2 mb-4 h-10">
-          {community.description}
-        </p>
-        <div className="flex justify-between text-xs text-gray-500 border-t border-white/5 pt-3">
-          <span className="flex items-center gap-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-            {community.memberCount}
-          </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
-            {community.postCount}
-          </span>
+
+      {/* Confirmation Overlay */}
+      {showConfirm && (
+        <div className="absolute inset-0 bg-[#0C1117]/95 z-50 flex flex-col items-center justify-center p-4 text-center animate-in fade-in duration-200 backdrop-blur-sm">
+          <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mb-3 text-red-500 border border-red-500/20">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </div>
+          <p className="text-white font-bold mb-1">Delete {community.name}?</p>
+          <p className="text-xs text-gray-400 mb-4">This cannot be undone.</p>
+          <div className="flex gap-2 w-full justify-center">
+            <button
+              onClick={handleCancelDelete}
+              disabled={isDeleting}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors border border-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors flex items-center gap-1.5"
+            >
+              {isDeleting ? 'Deleting...' : 'Confirm'}
+            </button>
+          </div>
         </div>
-      </div>
-    </Link>
+      )}
+    </div>
   );
 }

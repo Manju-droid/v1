@@ -458,11 +458,15 @@ func NewServer(cfg *config.Config) *Server {
 			r.Get("/{id}/members/{userId}", communityHandlers.GetMember) // Check membership
 
 			// Protected routes
+			// Protected routes
 			r.Group(func(r chi.Router) {
 				r.Use(api.RequireAuth)
 				r.Post("/", communityHandlers.Create)
 				r.Post("/{id}/join", communityHandlers.Join)
 				r.Post("/{id}/leave", communityHandlers.Leave)
+				r.Delete("/{id}", communityHandlers.Delete)
+				r.Put("/{id}/members/{userId}", communityHandlers.UpdateMemberStatus)
+				r.Delete("/{id}/members/{userId}", communityHandlers.KickMember)
 			})
 		})
 	})

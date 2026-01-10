@@ -108,7 +108,8 @@ func (r *PostMemoryRepository) List(limit, offset int) ([]*models.Post, error) {
 	posts := make([]*models.Post, 0, len(r.posts))
 	for _, post := range r.posts {
 		// Filter out TEMP_HIDDEN and REMOVED posts from feed
-		if post.Status != models.PostStatusTempHidden && post.Status != models.PostStatusRemoved {
+		// AND filter out Community posts from main feed
+		if post.Status != models.PostStatusTempHidden && post.Status != models.PostStatusRemoved && post.CommunityID == nil {
 			posts = append(posts, post)
 		}
 	}

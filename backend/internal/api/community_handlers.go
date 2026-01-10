@@ -78,6 +78,7 @@ func (h *CommunityHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		CommunityID:   community.ID,
 		UserID:        userID,
 		Role:          models.RoleAdmin,
+		Status:        "active",
 		PointsAwarded: true, // Creator gets points implicitly or handled by join? Let's say yes for simplicity
 		JoinedAt:      time.Now(),
 	}
@@ -153,16 +154,12 @@ func (h *CommunityHandlers) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Increment member count
-	comm, _ := h.communityRepo.GetByID(communityID)
-	if comm != nil {
-		comm.MemberCount++
-		h.communityRepo.Update(comm)
-	}
+	// Do NOT increment member count here for pending members
+	// Only increment when status becomes active (in UpdateMemberStatus)
 
-	JSON(w, http.StatusOK, map[string]interface{}{
-		"status":        "joined",
-		"pointsAwarded": pointsAwarded,
+	JSON(w, http.StatusCreated, map[string]interface{}{
+		"status":   "pending",
+		"isMember": true, // Technically a member record exists
 	})
 }
 
@@ -186,15 +183,156 @@ func (h *CommunityHandlers) Leave(w http.ResponseWriter, r *http.Request) {
 	JSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
 
+// Delete community (Creator only)
+func (h *CommunityHandlers) Delete(w http.ResponseWriter, r *http.Request) {
+	communityID := chi.URLParam(r, "id")
+	userID := r.Context().Value("userID").(string)
+
+	community, err := h.communityRepo.GetByID(communityID)
+	if err != nil {
+		http.Error(w, "Community not found", http.StatusNotFound)
+		return
+	}
+
+	// Strict check: Only creator can delete
+	if community.CreatorID != userID {
+		http.Error(w, "Only the creator can delete this community", http.StatusForbidden)
+		return
+	}
+
+	if err := h.communityRepo.Delete(communityID); err != nil {
+		http.Error(w, "Failed to delete community", http.StatusInternalServerError)
+		return
+	}
+
+	JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // Get Members
 func (h *CommunityHandlers) GetMembers(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	statusFilter := r.URL.Query().Get("status")
+
 	members, err := h.communityRepo.GetMembers(id)
 	if err != nil {
 		http.Error(w, "Failed to fetch members", http.StatusInternalServerError)
 		return
 	}
-	JSON(w, http.StatusOK, members)
+
+	// Filter and Enrich
+	type EnrichedMember struct {
+		*models.CommunityMember
+		User *models.User `json:"user"`
+	}
+
+	var enrichedMembers []EnrichedMember
+
+	fmt.Printf("DEBUG: GetMembers for Community %s. Total Raw Members: %d. Filter Status: %s\n", id, len(members), statusFilter)
+
+	for _, m := range members {
+		fmt.Printf("DEBUG: Member %s, Status: %s\n", m.UserID, m.Status)
+		if statusFilter != "" && m.Status != statusFilter {
+			fmt.Println("DEBUG: Skipping due to status mismatch")
+			continue
+		}
+
+		user, err := h.userRepo.GetByID(m.UserID)
+		if err != nil {
+			fmt.Printf("DEBUG: Skipping member %s - User not found in repo\n", m.UserID)
+			continue // Skip if user not found (shouldn't happen)
+		}
+
+		enrichedMembers = append(enrichedMembers, EnrichedMember{
+			CommunityMember: m,
+			User:            user,
+		})
+	}
+
+	fmt.Printf("DEBUG: Returning %d enriched members\n", len(enrichedMembers))
+
+	JSON(w, http.StatusOK, enrichedMembers)
+}
+
+// Update Member Status (Accept Request)
+func (h *CommunityHandlers) UpdateMemberStatus(w http.ResponseWriter, r *http.Request) {
+	communityID := chi.URLParam(r, "id")
+	targetUserID := chi.URLParam(r, "userId")
+	creatorID := r.Context().Value("userID").(string)
+
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// 1. Verify Community Ownership
+	community, err := h.communityRepo.GetByID(communityID)
+	if err != nil {
+		http.Error(w, "Community not found", http.StatusNotFound)
+		return
+	}
+	if community.CreatorID != creatorID {
+		http.Error(w, "Only the creator can manage members", http.StatusForbidden)
+		return
+	}
+
+	// 2. Get Member
+	member, err := h.communityRepo.GetMember(communityID, targetUserID)
+	if err != nil {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	// 3. Update Status
+	oldStatus := member.Status
+	member.Status = req.Status
+	if err := h.communityRepo.UpdateMember(member); err != nil {
+		http.Error(w, "Failed to update member", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Update Member Count if status changed to active
+	if oldStatus != "active" && member.Status == "active" {
+		community.MemberCount++
+		h.communityRepo.Update(community)
+	}
+
+	JSON(w, http.StatusOK, member)
+}
+
+// Kick/Decline Member
+func (h *CommunityHandlers) KickMember(w http.ResponseWriter, r *http.Request) {
+	communityID := chi.URLParam(r, "id")
+	targetUserID := chi.URLParam(r, "userId")
+	creatorID := r.Context().Value("userID").(string)
+
+	// 1. Verify Community Ownership
+	community, err := h.communityRepo.GetByID(communityID)
+	if err != nil {
+		http.Error(w, "Community not found", http.StatusNotFound)
+		return
+	}
+	if community.CreatorID != creatorID {
+		http.Error(w, "Only the creator can manage members", http.StatusForbidden)
+		return
+	}
+
+	// 2. Remove Member
+	if err := h.communityRepo.RemoveMember(communityID, targetUserID); err != nil {
+		http.Error(w, "Failed to remove member", http.StatusInternalServerError)
+		return
+	}
+
+	// Decrement count if they were active or pending?
+	// Usually RemoveMember doesn't handle count automatically in repo logic in some patterns,
+	// checking repo logic: RemoveMember in memory repo just removes from slice.
+	// So we should decrement count.
+	community.MemberCount--
+	h.communityRepo.Update(community)
+
+	JSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
 // Get specific member (check membership)

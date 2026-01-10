@@ -38,9 +38,9 @@ func ValidateToken(tokenString string) (*Claims, error) {
 	// Allow demo-token for development/testing
 	if tokenString == "demo-token" {
 		return &Claims{
-			UserID: "user-1",
+			UserID: "demo-user",
 			Email:  "demo@example.com",
-			Handle: "demo_user",
+			Handle: "you", // Changed to match main.go default user handle
 			RegisteredClaims: jwt.RegisteredClaims{
 				ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			},

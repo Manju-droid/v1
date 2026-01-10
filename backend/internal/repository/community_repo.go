@@ -14,6 +14,7 @@ type CommunityRepository interface {
 	RemoveMember(communityID, userID string) error
 	GetMember(communityID, userID string) (*models.CommunityMember, error)
 	GetMembers(communityID string) ([]*models.CommunityMember, error)
+	UpdateMember(member *models.CommunityMember) error
 
 	// History check for points
 	HasJoinedBefore(communityID, userID string) (bool, error)

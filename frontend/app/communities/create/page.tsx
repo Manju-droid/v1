@@ -33,7 +33,20 @@ export default function CreateCommunityPage() {
     // For this mock/demo, we assume the backend handles auth via cookie or we mock it
     // But wait, the backend endpoint expects specific headers maybe?
     // The layout usually handles auth context. We'll rely on fetch wrapping or simple token if available.
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const getCookie = (name: string) => {
+        if (typeof document === 'undefined') return null;
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+        return null;
+    };
+    const token = typeof window !== 'undefined' ? getCookie('v_auth') : null;
+
+    if (token) {
+        console.log('DEBUG: Found auth token in cookie');
+    } else {
+        console.log('DEBUG: No auth token found in cookie - falling back to demo logic?');
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

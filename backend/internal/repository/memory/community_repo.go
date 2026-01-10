@@ -3,7 +3,6 @@ package memory
 import (
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/yourusername/v-backend/internal/models"
 	"github.com/yourusername/v-backend/internal/repository"
@@ -23,32 +22,8 @@ func NewCommunityMemoryRepository() repository.CommunityRepository {
 		history:     make(map[string]map[string]bool),
 	}
 
-	// Seed a default community
-	defaultComm := &models.Community{
-		ID:          "community-1",
-		Name:        "Tech Enthusiasts",
-		Description: "A place to discuss the latest in technology, programming, and gadgets.",
-		Category:    models.CategoryTechnology,
-		ImageURL:    "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=2070&auto=format&fit=crop",
-		BannerURL:   "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop",
-		CreatorID:   "user-1",
-		MemberCount: 1,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-	repo.communities[defaultComm.ID] = defaultComm
-
-	// Add creator as member
-	member := &models.CommunityMember{
-		CommunityID:   defaultComm.ID,
-		UserID:        "user-1",
-		Role:          models.RoleAdmin,
-		Status:        "active",
-		PointsAwarded: true,
-		JoinedAt:      time.Now(),
-	}
-	repo.members[defaultComm.ID] = append(repo.members[defaultComm.ID], member)
-	repo.history[defaultComm.ID] = map[string]bool{"user-1": true}
+	// Seed a default community - REMOVED
+	// repo.communities = make(map[string]*models.Community)
 
 	return repo
 }
@@ -172,4 +147,18 @@ func (r *CommunityMemoryRepository) HasJoinedBefore(communityID, userID string) 
 		return hist[userID], nil
 	}
 	return false, nil
+}
+
+func (r *CommunityMemoryRepository) UpdateMember(member *models.CommunityMember) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	members := r.members[member.CommunityID]
+	for i, m := range members {
+		if m.UserID == member.UserID {
+			r.members[member.CommunityID][i] = member
+			return nil
+		}
+	}
+	return errors.New("member not found")
 }

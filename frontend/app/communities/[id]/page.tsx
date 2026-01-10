@@ -15,6 +15,7 @@ import { LeftNav } from '@/components/feed/LeftNav';
 import { MobileNav } from '@/components/feed/MobileNav';
 import { FeedHeader } from '@/components/feed/FeedHeader';
 import { RightSidebar } from '@/components/feed/RightSidebar';
+import { PendingRequestsSidebar } from '@/components/community/PendingRequestsSidebar';
 
 interface Community {
     id: string;
@@ -23,6 +24,7 @@ interface Community {
     category: string;
     imageUrl: string;
     memberCount: number;
+    creatorId: string;
 }
 
 interface Post {
@@ -110,10 +112,18 @@ export default function CommunityFeedPage() {
         addToast('Link copied to clipboard', 'success');
     };
 
+    const [notFound, setNotFound] = useState(false);
+
     const fetchCommunity = useCallback(async () => {
         try {
             const res = await fetch(`http://localhost:8080/api/communities/${id}`);
-            if (!res.ok) throw new Error('Failed to fetch community');
+            if (!res.ok) {
+                if (res.status === 404) {
+                    setNotFound(true);
+                    return;
+                }
+                throw new Error('Failed to fetch community');
+            }
             const response = await res.json();
             setCommunity(response.data || null);
         } catch (err) {
@@ -125,6 +135,7 @@ export default function CommunityFeedPage() {
     console.log('RENDER: CommunityPage. currentUser:', currentUser?.id, 'id:', id);
 
     const checkMembership = useCallback(async () => {
+        if (notFound) return; // Don't check membership if not found
         console.log('FUNC: checkMembership called. currentUser:', currentUser?.id);
         if (!currentUser?.id) {
             console.log('ABORT: checkMembership - no user');
@@ -134,18 +145,25 @@ export default function CommunityFeedPage() {
         try {
             console.log('FETCH: Checking membership for', currentUser.id);
             const res = await fetch(`http://localhost:8080/api/communities/${id}/members/${currentUser.id}`);
-            if (res.ok) {
-                const data = await res.json();
-                console.log('Membership check response:', data);
-                if (data.status === 'pending') {
-                    console.log('Setting isPending to true');
-                    setIsPending(true);
-                    setIsMember(false); // Treat pending as not yet a member for UI purposes
-                } else {
-                    console.log('Setting isPending to false, status:', data.status);
-                    setIsPending(false);
-                    setIsMember(data.isMember);
-                }
+            const response = await res.json();
+            console.log('Membership check response FULL JSON:', JSON.stringify(response, null, 2));
+            const data = response.data;
+            console.log('Membership check DATA:', data);
+
+            if (data && data.status === 'pending') {
+                console.log('Setting isPending to true');
+                setIsPending(true);
+                setIsMember(false);
+            } else if (data) {
+                console.log('Setting isPending to false, status:', data.status, 'isMember:', data.isMember);
+                setIsPending(false);
+                // Explicitly cast or ensure boolean
+                const isMem = !!data.isMember;
+                console.log('Setting setIsMember to:', isMem);
+                setIsMember(isMem);
+            } else {
+                console.warn('Membership check: data is missing or null', response);
+                setIsMember(false);
             }
         } catch (error) {
             console.error('Failed to check membership:', error);
@@ -154,9 +172,28 @@ export default function CommunityFeedPage() {
         }
     }, [id, currentUser?.id]);
 
+    // Helper to get cookie
+    const getCookie = (name: string) => {
+        if (typeof document === 'undefined') return null;
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+        return null;
+    };
+
     const fetchPosts = useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:8080/api/posts?communityId=${id}`);
+            // Retrieve token to ensure backend knows who is reacting
+            const token = getCookie('v_auth') || localStorage.getItem('auth_token');
+
+            const headers: Record<string, string> = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const res = await fetch(`http://localhost:8080/api/posts?communityId=${id}`, {
+                headers
+            });
             if (res.ok) {
                 const response = await res.json();
                 // PostHandlers.List returns { posts: [...] }. Wrapped -> { data: { posts: [...] } }
@@ -345,12 +382,26 @@ export default function CommunityFeedPage() {
         );
     }
 
-    if (!community) {
+    if (notFound || !community) {
         return (
-            <div className="min-h-screen bg-black text-white flex items-center justify-center">
-                <div className="text-center">
-                    <h1 className="text-2xl font-bold mb-2">Community not found</h1>
-                    <Link href="/feed" className="text-cyan-400 hover:underline">Return to Feed</Link>
+            <div className="min-h-screen bg-[#0C1117] text-[#E6EAF0]">
+                <div className="relative">
+                    <FeedHeader />
+                    <LeftNav />
+                    <main className="lg:ml-[72px] xl:mr-[340px] min-h-screen pt-16 flex items-center justify-center">
+                        <div className="text-center">
+                            <h1 className="text-3xl font-bold text-white mb-4">Community Not Found</h1>
+                            <p className="text-gray-400 mb-8 max-w-md mx-auto">The community you are looking for does not exist, has been removed, or you don't have permission to view it.</p>
+                            <Link
+                                href="/communities"
+                                className="inline-block bg-cyan-500 hover:bg-cyan-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                            >
+                                Browse Communities
+                            </Link>
+                        </div>
+                    </main>
+                    <RightSidebar />
+                    <MobileNav />
                 </div>
             </div>
         );
@@ -379,6 +430,8 @@ export default function CommunityFeedPage() {
                                         <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded">{community.category}</span>
                                         <span className="text-sm text-gray-400 font-medium">{community.memberCount} Members</span>
                                     </div>
+
+
                                 </div>
                                 <div className="absolute bottom-6 right-6">
                                     {membershipLoading ? (
@@ -620,7 +673,16 @@ export default function CommunityFeedPage() {
                     </div>
                 </main>
 
-                <RightSidebar />
+                {/* Debug Info for Sidebar */}
+                {/* <div className="fixed bottom-4 left-4 bg-black/80 text-xs text-white p-2 z-50">
+                    User: {currentUser?.id} | Creator: {community.creatorId} | Match: {String(currentUser?.id === community.creatorId)}
+                </div> */}
+
+                {currentUser?.id === community.creatorId ? (
+                    <PendingRequestsSidebar communityId={id as string} />
+                ) : (
+                    <RightSidebar />
+                )}
                 <MobileNav />
             </div>
         </div>
