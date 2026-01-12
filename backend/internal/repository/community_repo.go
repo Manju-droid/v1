@@ -18,4 +18,7 @@ type CommunityRepository interface {
 
 	// History check for points
 	HasJoinedBefore(communityID, userID string) (bool, error)
+
+	// Fetch joined communities
+	GetJoinedCommunities(userID string) ([]*models.Community, error)
 }

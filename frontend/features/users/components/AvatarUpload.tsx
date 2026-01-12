@@ -34,7 +34,7 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({ currentAvatar, onAva
   const handleRemove = async () => {
     try {
       await removeAvatar();
-      const defaultAvatar = 'https://api.dicebear.com/7.x/avataaars/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf';
+      const defaultAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf';
       onAvatarChange(defaultAvatar);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to remove avatar');
@@ -57,7 +57,7 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({ currentAvatar, onAva
       >
         {uploading ? 'Uploading...' : 'Change Photo'}
       </button>
-      {currentAvatar && currentAvatar !== 'https://api.dicebear.com/7.x/avataaars/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf' && (
+      {currentAvatar && currentAvatar !== 'https://api.dicebear.com/7.x/bottts/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf' && (
         <button
           onClick={handleRemove}
           className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-semibold transition-colors"

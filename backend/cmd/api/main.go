@@ -228,7 +228,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Initialize Community components
 	communityRepo := memory.NewCommunityMemoryRepository()
-	communityHandlers := api.NewCommunityHandlers(communityRepo, userRepo, pointsService)
+	communityHandlers := api.NewCommunityHandlers(communityRepo, userRepo, pointsService, notifRepo)
 
 	// Initialize handlers
 	authHandlers := api.NewAuthHandlers(authRepo, userRepo, pointsService, notifRepo)
@@ -461,6 +461,7 @@ func NewServer(cfg *config.Config) *Server {
 			// Protected routes
 			r.Group(func(r chi.Router) {
 				r.Use(api.RequireAuth)
+				r.Get("/joined", communityHandlers.ListJoined) // New protected route
 				r.Post("/", communityHandlers.Create)
 				r.Post("/{id}/join", communityHandlers.Join)
 				r.Post("/{id}/leave", communityHandlers.Leave)

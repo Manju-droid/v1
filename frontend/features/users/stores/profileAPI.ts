@@ -206,7 +206,7 @@ const updateUserAvatar = async (avatarUrl: string): Promise<void> => {
 // Remove avatar (reset to initials)
 export const removeAvatar = async (): Promise<void> => {
   try {
-    const defaultAvatar = 'https://api.dicebear.com/7.x/avataaars/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf';
+    const defaultAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=CurrentUser&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf';
     if (!currentUserMock?.id) throw new Error('User not authenticated');
     await userAPI.update(currentUserMock.id, { avatarUrl: defaultAvatar });
 

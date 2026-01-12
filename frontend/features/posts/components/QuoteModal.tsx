@@ -68,7 +68,7 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({ post, onClose, onSubmit 
             <div className="flex gap-3">
               <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-cyan-500/20">
                 <Image
-                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=CurrentUser"
+                  src="https://api.dicebear.com/7.x/bottts/svg?seed=CurrentUser"
                   alt="Your avatar"
                   fill
                   className="object-cover"
@@ -145,10 +145,10 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({ post, onClose, onSubmit 
           <div className="flex items-center justify-between p-5 border-t border-white/[0.06]">
             <span
               className={`text-xs ${remaining < 20
-                  ? remaining < 0
-                    ? 'text-red-400'
-                    : 'text-yellow-400'
-                  : 'text-gray-500'
+                ? remaining < 0
+                  ? 'text-red-400'
+                  : 'text-yellow-400'
+                : 'text-gray-500'
                 }`}
             >
               {remaining < 50 && `${remaining} characters remaining`}
@@ -166,8 +166,8 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({ post, onClose, onSubmit 
                 onClick={handleSubmit}
                 disabled={!content.trim() || remaining < 0}
                 className={`px-6 py-2 rounded-lg font-medium text-sm transition-all ${content.trim() && remaining >= 0
-                    ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:shadow-lg hover:shadow-cyan-500/30'
-                    : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:shadow-lg hover:shadow-cyan-500/30'
+                  : 'bg-gray-800 text-gray-500 cursor-not-allowed'
                   }`}
               >
                 Quote

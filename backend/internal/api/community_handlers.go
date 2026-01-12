@@ -17,13 +17,15 @@ type CommunityHandlers struct {
 	communityRepo repository.CommunityRepository
 	userRepo      repository.UserRepository
 	pointsService *service.PointsService
+	notifRepo     repository.NotificationRepository
 }
 
-func NewCommunityHandlers(communityRepo repository.CommunityRepository, userRepo repository.UserRepository, pointsService *service.PointsService) *CommunityHandlers {
+func NewCommunityHandlers(communityRepo repository.CommunityRepository, userRepo repository.UserRepository, pointsService *service.PointsService, notifRepo repository.NotificationRepository) *CommunityHandlers {
 	return &CommunityHandlers{
 		communityRepo: communityRepo,
 		userRepo:      userRepo,
 		pointsService: pointsService,
+		notifRepo:     notifRepo,
 	}
 }
 
@@ -79,10 +81,13 @@ func (h *CommunityHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		UserID:        userID,
 		Role:          models.RoleAdmin,
 		Status:        "active",
-		PointsAwarded: true, // Creator gets points implicitly or handled by join? Let's say yes for simplicity
+		PointsAwarded: true,
 		JoinedAt:      time.Now(),
 	}
 	h.communityRepo.AddMember(member)
+
+	// Award points for creating community
+	h.pointsService.UpdateUserPoints(userID, service.ActionCommunityCreate)
 
 	JSON(w, http.StatusCreated, community)
 }
@@ -92,6 +97,23 @@ func (h *CommunityHandlers) List(w http.ResponseWriter, r *http.Request) {
 	communities, err := h.communityRepo.List()
 	if err != nil {
 		http.Error(w, "Failed to list communities", http.StatusInternalServerError)
+		return
+	}
+	JSON(w, http.StatusOK, communities)
+}
+
+// ListJoined lists communities the current user has joined
+func (h *CommunityHandlers) ListJoined(w http.ResponseWriter, r *http.Request) {
+	// UserID comes from RequireAuth middleware
+	userID := r.Context().Value("userID")
+	if userID == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	communities, err := h.communityRepo.GetJoinedCommunities(userID.(string))
+	if err != nil {
+		http.Error(w, "Failed to list joined communities", http.StatusInternalServerError)
 		return
 	}
 	JSON(w, http.StatusOK, communities)
@@ -303,6 +325,24 @@ func (h *CommunityHandlers) UpdateMemberStatus(w http.ResponseWriter, r *http.Re
 	if oldStatus != "active" && member.Status == "active" {
 		community.MemberCount++
 		h.communityRepo.Update(community)
+
+		// Create notification for the user
+		notification := &models.Notification{
+			ID:            uuid.New().String(),
+			UserID:        targetUserID,
+			Type:          "community_invite", // Using 'community_invite' or generic 'system' type
+			Title:         "Request Accepted",
+			Message:       fmt.Sprintf("Your request to join %s has been accepted!", community.Name),
+			CommunityID:   &communityID,
+			CommunityName: &community.Name,
+			Read:          false,
+			CreatedAt:     time.Now(),
+		}
+
+		if err := h.notifRepo.Create(notification); err != nil {
+			fmt.Printf("Error creating acceptance notification: %v\n", err)
+			// Don't fail the request if notification fails
+		}
 	}
 
 	JSON(w, http.StatusOK, member)

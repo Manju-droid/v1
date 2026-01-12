@@ -82,31 +82,17 @@ func (h *AuthHandlers) Signup(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate age and determine age group for avatar
 	// Calculate age and determine age group for avatar
-	age := int(time.Since(dob).Hours() / 24 / 365.25)
+	// age := int(time.Since(dob).Hours() / 24 / 365.25)
 
 	// Create avatar seed using gender (if provided) and age group
 	// This ensures age-appropriate avatar variation
 	// Determine avatar URL based on gender
-	avatarParams := ""
-	facialHairSet := false
+	// For bottts (robots), we don't need hair parameters
 
-	if req.Gender == "male" {
-		// Use a short list of male hairstyles to avoid HTTP 400 (URL length limits)
-		avatarParams = "&top=shortCurly,shortFlat,shortRound,sides,theCaesar&facialHairProbability=40"
-		facialHairSet = true
-	} else if req.Gender == "female" {
-		// Use a short list of female hairstyles to avoid HTTP 400 (URL length limits)
-		avatarParams = "&top=longButNotTooLong,bob,curly,straight01,straight02&facialHairProbability=0"
-		facialHairSet = true
-	}
-
-	avatarURL := "https://api.dicebear.com/9.x/avataaars/svg?seed=" + req.Handle + "&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf" + avatarParams
+	avatarURL := "https://api.dicebear.com/9.x/bottts/svg?seed=" + req.Handle + "&backgroundColor=b6e3f4,c0aede,ffd5dc,ffdfbf"
 
 	// Age adjustments for avatar
-	// Note: Removed hairColor parameter as comma-separated values cause DiceBear API errors
-	if age < 13 && !facialHairSet {
-		avatarURL += "&facialHairProbability=0"
-	}
+	// Robot avatars don't need facial hair adjustments based on age
 
 	// Create user
 	userID := uuid.New().String()

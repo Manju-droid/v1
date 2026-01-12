@@ -26,7 +26,7 @@ func NewUserMemoryRepository() *UserMemoryRepository {
 		Name:      "Demo User",
 		Handle:    "demo_user",
 		Email:     "demo@example.com",
-		AvatarURL: "https://api.dicebear.com/9.x/avataaars/svg?seed=demo",
+		AvatarURL: "https://api.dicebear.com/9.x/bottts/svg?seed=demo",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

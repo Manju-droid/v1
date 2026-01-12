@@ -162,3 +162,24 @@ func (r *CommunityMemoryRepository) UpdateMember(member *models.CommunityMember)
 	}
 	return errors.New("member not found")
 }
+
+func (r *CommunityMemoryRepository) GetJoinedCommunities(userID string) ([]*models.Community, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	joinedCommunities := make([]*models.Community, 0)
+
+	for communityID, members := range r.members {
+		for _, m := range members {
+			// Check if user is a member and status is active (or pending? usually joined implies active member, let's include all for now or just active?)
+			// User request "joined communities" implies active membership.
+			if m.UserID == userID && m.Status == "active" {
+				if community, exists := r.communities[communityID]; exists {
+					joinedCommunities = append(joinedCommunities, community)
+				}
+				break // Found membership in this community, move to next community
+			}
+		}
+	}
+	return joinedCommunities, nil
+}

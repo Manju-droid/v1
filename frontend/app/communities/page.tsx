@@ -23,6 +23,7 @@ interface Community {
 }
 
 const CATEGORIES = [
+  'Joined',
   'All',
   'Politics',
   'Entertainment',
@@ -32,6 +33,14 @@ const CATEGORIES = [
   'General',
 ];
 
+const getCookie = (name: string) => {
+  if (typeof document === 'undefined') return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift();
+  return null;
+};
+
 export default function CommunitiesPage() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,17 +49,44 @@ export default function CommunitiesPage() {
   const { currentUser } = useStore();
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/communities')
-      .then((res) => res.json())
+    setLoading(true);
+    let url = 'http://localhost:8080/api/communities';
+    const headers: HeadersInit = {};
+
+    if (activeCategory === 'Joined') {
+      url = 'http://localhost:8080/api/communities/joined';
+      const token = getCookie('v_auth') || localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        // Not logged in, can't view joined
+        setCommunities([]);
+        setLoading(false);
+        return;
+      }
+    }
+
+    fetch(url, { headers })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      })
       .then((response) => {
-        setCommunities(response.data || []);
+        // Handle both simple array response (from joined endpoint if modified) or standard response structure
+        // The backend List returns just data, checking structure...
+        // Backend List wraps in JSON(w, 200, communities) -> communities is array.
+        // But handler uses JSON helper? If JSON helper wraps in { data: ... } check that.
+        // My previous view of page.tsx used `response.data || []`.
+        // Let's assume standard wrapper is present.
+        setCommunities(Array.isArray(response) ? response : (response.data || []));
         setLoading(false);
       })
       .catch((err) => {
         console.error('Failed to fetch communities', err);
+        setCommunities([]);
         setLoading(false);
       });
-  }, []);
+  }, [activeCategory]);
 
   const handleCommunityDeleted = (id: string) => {
     setCommunities(prev => prev.filter(c => c.id !== id));
@@ -64,24 +100,27 @@ export default function CommunitiesPage() {
       c.description.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Then filter by category if not All
-    const categoryFiltered = activeCategory === 'All'
-      ? filtered
-      : filtered.filter(c => c.category === activeCategory);
+    // Filter by category
+    let categoryFiltered = filtered;
+    if (activeCategory !== 'All' && activeCategory !== 'Joined') {
+      categoryFiltered = filtered.filter(c => c.category === activeCategory);
+    }
+    // If 'Joined' or 'All', we show everything returned by the API (which is already filtered for Joined)
 
-    // Group for "All" view
+    // Grouping
     const grouped: Record<string, Community[]> = {};
-    if (activeCategory === 'All') {
-      // Only show categories that have results
-      CATEGORIES.slice(1).forEach(cat => { // Skip 'All'
-        const inCat = categoryFiltered.filter(c => c.category === cat || (!c.category && cat === 'General'));
+
+    // For "All" OR "Joined", we can group by category for better display
+    if (activeCategory === 'All' || activeCategory === 'Joined') {
+      CATEGORIES.slice(2).forEach(cat => { // Skip Joined and All
+        const inCat = filtered.filter(c => c.category === cat || (!c.category && cat === 'General'));
         if (inCat.length > 0) grouped[cat] = inCat;
       });
     }
 
     return {
       groupedCommunities: grouped,
-      flatCommunities: categoryFiltered // Used when a specific category is active
+      flatCommunities: categoryFiltered
     };
   }, [communities, searchQuery, activeCategory]);
 
@@ -142,15 +181,19 @@ export default function CommunitiesPage() {
                 <div className="flex flex-col items-center gap-3">
                   <svg className="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                   <p className="text-gray-400">
-                    {searchQuery ? `No communities found for "${searchQuery}"` : 'No communities found.'}
+                    {searchQuery
+                      ? `No communities found for "${searchQuery}"`
+                      : activeCategory === 'Joined'
+                        ? 'You haven\'t joined any communities yet.'
+                        : 'No communities found.'}
                   </p>
                   <Link href="/communities/create" className="text-cyan-400 hover:text-cyan-300">Create one!</Link>
                 </div>
               </div>
             ) : (
               <div className="space-y-12">
-                {/* Render Grouped Sections if "All" is selected */}
-                {activeCategory === 'All' ? Object.entries(groupedCommunities).map(([category, items]) => (
+                {/* Render Grouped Sections if "All" OR "Joined" is selected */}
+                {(activeCategory === 'All' || activeCategory === 'Joined') ? Object.entries(groupedCommunities).map(([category, items]) => (
                   <div key={category} className="space-y-4">
                     <div className="flex items-center gap-3 border-l-4 border-cyan-500 pl-3">
                       <h2 className="text-xl font-bold text-white">{category}</h2>
@@ -159,19 +202,20 @@ export default function CommunitiesPage() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <div className="flex overflow-x-auto gap-6 pb-6 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
                       {items.map((community) => (
-                        <CommunityCard
-                          key={community.id}
-                          community={community}
-                          currentUser={currentUser}
-                          onDelete={handleCommunityDeleted}
-                        />
+                        <div key={community.id} className="w-[280px] md:w-[320px] flex-none">
+                          <CommunityCard
+                            community={community}
+                            currentUser={currentUser}
+                            onDelete={handleCommunityDeleted}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
                 )) : (
-                  /* Render Single Gird if a specific category is selected */
+                  /* Render Single Grid if a specific category is selected */
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {flatCommunities.map((community) => (
                       <CommunityCard
@@ -199,14 +243,6 @@ function CommunityCard({ community, currentUser, onDelete }: { community: Commun
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const getCookie = (name: string) => {
-    if (typeof document === 'undefined') return null;
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop()?.split(';').shift();
-    return null;
-  };
 
   const onMenuDeleteClick = (e: React.MouseEvent) => {
     e.preventDefault();
