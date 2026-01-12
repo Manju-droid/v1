@@ -36,13 +36,12 @@ export default function DebatesPage() {
   const { currentUser, syncCurrentUser } = useStore();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
-  // Sync current user when authenticated but currentUser is not set
+  // Auth check
   useEffect(() => {
-    if (isAuthenticated && !currentUser && !authLoading) {
-      console.log('[Debates Page] User authenticated but currentUser not set, syncing...');
-      syncCurrentUser();
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/');
     }
-  }, [isAuthenticated, currentUser, authLoading, syncCurrentUser]);
+  }, [authLoading, isAuthenticated, router]);
 
   // Sync current user when authenticated
   useEffect(() => {

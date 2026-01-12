@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useStore } from '@/lib/store';
 import { hashtagAPI } from '@v/api-client';
 import { useSignaling } from '@/features/debates';
+import { useAuth } from '@/features/auth';
 
 interface LocalHashtag {
   slug: string;
@@ -42,6 +43,14 @@ export default function LocalHashtagHubPage() {
   const [newLocalHashtagName, setNewLocalHashtagName] = useState('');
   const [newLocalHashtagCategory, setNewLocalHashtagCategory] = useState('General');
   const [openMenuSlug, setOpenMenuSlug] = useState<string | null>(null);
+  const { isAuthenticated, isLoading: authLoading } = useAuth(); // Added useAuth hook
+
+  // Auth check
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   // WebSocket connection for real-time hashtag updates
   const { isConnected: wsConnected, setOnMessage } = useSignaling(

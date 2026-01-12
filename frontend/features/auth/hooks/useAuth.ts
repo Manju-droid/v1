@@ -116,7 +116,40 @@ export function useAuth() {
       }
     };
 
+    // Initial validation
     validateAuth();
+
+    // Re-validate on page show (handles back/forward cache)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        console.log('[Auth] Page restored from cache, re-validating...');
+        validateAuth();
+      } else {
+        // Even if not persisted, good to check on back navigation in some browsers
+        // But checking every time can be expensive if not cached?
+        // Let's rely on the cookie check which is cheap
+        const hasCookie = isAuthenticatedClient();
+        const hasLocalStorageToken = typeof window !== 'undefined' && localStorage.getItem('auth_token');
+        if (!hasCookie && !hasLocalStorageToken) {
+           console.log('[Auth] No auth found on pageshow, clearing state...');
+           setIsAuthenticated(false);
+           // Force reload if we are supposed to be authenticated but aren't
+           // But how do we know if we "supposed to be"?
+           // If the component is mounted, it means we are in the app.
+        }
+      }
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    
+    // Also listen for focus - sometimes helpful
+    const handleFocus = () => {
+       // Optional: could re-validate on focus if critical
+    };
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+    };
   }, []);
 
   return { isAuthenticated, isLoading };

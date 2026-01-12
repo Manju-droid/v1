@@ -33,6 +33,8 @@ const CATEGORIES = [
   'General',
 ];
 
+import { useAuth } from '@/features/auth';
+
 const getCookie = (name: string) => {
   if (typeof document === 'undefined') return null;
   const value = `; ${document.cookie}`;
@@ -47,8 +49,22 @@ export default function CommunitiesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const { currentUser } = useStore();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+
+  // Auth check
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
+    // Only fetch if authenticated (or if we want to show public communities, but req implies protected)
+    // The previous code didn't strictly require auth for the page, but useAuth is cleaner.
+    // If not authenticated, we redirect anyway.
+    if (authLoading || !isAuthenticated) return;
+
     setLoading(true);
     let url = 'http://localhost:8080/api/communities';
     const headers: HeadersInit = {};

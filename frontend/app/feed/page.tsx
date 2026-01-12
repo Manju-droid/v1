@@ -10,6 +10,7 @@ import { FeedHeader } from '@/components/feed/FeedHeader';
 import { useStore } from '@/lib/store';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/features/auth';
+import { useRouter } from 'next/navigation';
 
 const POSTS_PER_PAGE = 5;
 const POLL_INTERVAL = 10000; // Poll for new posts every 10 seconds
@@ -22,16 +23,25 @@ export default function FeedPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [quoteModalPost, setQuoteModalPost] = useState<any>(null);
-  
+
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  const router = useRouter();
 
   // Sync current user when authenticated
   useEffect(() => {
-    if (isAuthenticated && !currentUser && !authLoading) {
-      console.log('[Feed Page] User authenticated but currentUser not set, syncing...');
-      syncCurrentUser();
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        router.replace('/');
+      } else if (currentUser && !currentUser.id) {
+        // Double check user object
+        // syncCurrentUser(); 
+      } else if (isAuthenticated && !currentUser) {
+        console.log('[Feed Page] User authenticated but currentUser not set, syncing...');
+        syncCurrentUser();
+      }
     }
-  }, [isAuthenticated, currentUser?.id, authLoading, syncCurrentUser]);
+  }, [isAuthenticated, authLoading, currentUser, syncCurrentUser, router]);
 
   // Poll for new posts periodically
   useEffect(() => {
@@ -72,19 +82,19 @@ export default function FeedPage() {
   const feedPosts = useMemo(() => {
     const filtered = posts.filter(post => {
       const content = post.content.toLowerCase();
-      
+
       // Exclude posts created via hashtag page composer (these have #boost or #shout)
       // These posts should only appear in hashtag hub pages, not in feed
       const isHashtagPagePost = content.includes('#boost') || content.includes('#shout');
       if (isHashtagPagePost) {
         return false;
       }
-      
+
       // Include all other posts (with or without hashtags)
       // Show posts from followed users, current user, or general posts
       const isFromFollowedUser = isFollowing(post.author.id);
       const isFromCurrentUser = currentUser && post.author.id === currentUser.id;
-      
+
       // Show posts from followed users, current user, or general posts
       return isFromFollowedUser || isFromCurrentUser || true; // Show all posts (except hashtag page posts)
     });
@@ -158,11 +168,11 @@ export default function FeedPage() {
     setTimeout(() => {
       const newCount = displayedCount + POSTS_PER_PAGE;
       setDisplayedCount(newCount);
-      
+
       if (newCount >= feedPosts.length) {
         setHasMore(false);
       }
-      
+
       setIsLoading(false);
     }, 800);
   };
@@ -173,7 +183,7 @@ export default function FeedPage() {
       type: media.type,
       url: URL.createObjectURL(media.file),
     } : undefined;
-    
+
     await addPost(content, mediaData, options);
     addToast('Posted', 'success');
   };
@@ -242,7 +252,7 @@ export default function FeedPage() {
                   <p className="text-gray-600 text-xs mt-1">Check back later for more updates</p>
                 </div>
               )}
-              
+
               {/* Empty state */}
               {feedPosts.length === 0 && !isLoading && (
                 <div className="text-center py-12">
